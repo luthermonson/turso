@@ -3286,20 +3286,49 @@ impl DatabaseCatalog {
     }
 }
 
+/// Query runner that iterates over statements in a SQL string, using the
+/// SQLite parser for statement splitting.
 pub struct QueryRunner<'a> {
-    parser: Parser<'a>,
     conn: &'a Arc<Connection>,
-    statements: &'a [u8],
-    last_offset: usize,
+    inner: QueryRunnerInner<'a>,
+}
+
+enum QueryRunnerInner<'a> {
+    Sqlite {
+        parser: Parser<'a>,
+        statements: &'a [u8],
+        last_offset: usize,
+    },
 }
 
 impl<'a> QueryRunner<'a> {
     pub(crate) fn new(conn: &'a Arc<Connection>, statements: &'a [u8]) -> Self {
-        Self {
+        let inner = QueryRunnerInner::Sqlite {
             parser: Parser::new(statements),
-            conn,
             statements,
             last_offset: 0,
+        };
+        Self { conn, inner }
+    }
+
+    fn next_sqlite(&mut self) -> Option<Result<Option<Statement>>> {
+        let QueryRunnerInner::Sqlite {
+            parser,
+            statements,
+            last_offset,
+        } = &mut self.inner;
+
+        match parser.next_cmd() {
+            Ok(Some(cmd)) => {
+                let byte_offset_end = parser.offset();
+                let input = str::from_utf8(&statements[*last_offset..byte_offset_end])
+                    .unwrap()
+                    .trim();
+                *last_offset = byte_offset_end;
+                Some(self.conn.run_cmd(cmd, input))
+            }
+            Ok(None) => None,
+            Err(err) => Some(Result::Err(LimboError::from(err))),
         }
     }
 }
@@ -3308,17 +3337,8 @@ impl Iterator for QueryRunner<'_> {
     type Item = Result<Option<Statement>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.parser.next_cmd() {
-            Ok(Some(cmd)) => {
-                let byte_offset_end = self.parser.offset();
-                let input = str::from_utf8(&self.statements[self.last_offset..byte_offset_end])
-                    .unwrap()
-                    .trim();
-                self.last_offset = byte_offset_end;
-                Some(self.conn.run_cmd(cmd, input))
-            }
-            Ok(None) => None,
-            Err(err) => Some(Result::Err(LimboError::from(err))),
+        match &self.inner {
+            QueryRunnerInner::Sqlite { .. } => self.next_sqlite(),
         }
     }
 }
