@@ -73,6 +73,40 @@ pub trait SchemaDialect: Send + Sync + 'static {
         schema: &mut crate::schema::Schema,
         enable_custom_types: bool,
     ) -> crate::Result<()>;
+
+    /// Resolve a function name in user SQL to the engine's function IR.
+    ///
+    /// The dialect owns its scalar function surface: the SQLite dialect
+    /// resolves the built-in set, another dialect resolves its own —
+    /// mapping names onto engine primitives where it wants them (usually
+    /// by composing with [`sqlite::resolve_builtin_function`]) and onto
+    /// [`crate::function::Func::Dialect`] for functions it executes
+    /// itself via [`SchemaDialect::exec_scalar_function`]. Consulted
+    /// before extension functions; engine-generated helper statements
+    /// always resolve with SQLite semantics instead.
+    fn resolve_function(
+        &self,
+        name: &str,
+        arg_count: usize,
+    ) -> crate::Result<Option<crate::function::Func>>;
+
+    /// Execute a dialect scalar function at runtime.
+    ///
+    /// Receives the connection — unlike extension functions — because
+    /// catalog functions (e.g. `pg_get_tabledef`) need to inspect the
+    /// schema. Only reached through [`crate::function::Func::Dialect`],
+    /// so a dialect that never resolves to that variant can keep the
+    /// default "no such function" error.
+    fn exec_scalar_function(
+        &self,
+        _conn: &crate::Connection,
+        name: &str,
+        _args: &[crate::Value],
+    ) -> crate::Result<crate::Value> {
+        Err(crate::LimboError::ParseError(format!(
+            "no such function: {name}"
+        )))
+    }
 }
 
 #[cfg(test)]
@@ -111,6 +145,36 @@ mod tests {
             _body: &turso_parser::ast::CreateTableBody,
         ) -> crate::Result<String> {
             Ok(format!("/* test */ {input}"))
+        }
+
+        fn resolve_function(
+            &self,
+            name: &str,
+            arg_count: usize,
+        ) -> crate::Result<Option<crate::function::Func>> {
+            if name.eq_ignore_ascii_case("test_add_one") && arg_count == 1 {
+                return Ok(Some(crate::function::Func::Dialect(
+                    "test_add_one".to_string(),
+                )));
+            }
+            sqlite::resolve_builtin_function(name, arg_count)
+        }
+
+        fn exec_scalar_function(
+            &self,
+            _conn: &crate::Connection,
+            name: &str,
+            args: &[crate::Value],
+        ) -> crate::Result<crate::Value> {
+            assert_eq!(name, "test_add_one");
+            let crate::Value::Numeric(crate::numeric::Numeric::Integer(v)) = args[0] else {
+                return Err(crate::LimboError::InvalidArgument(
+                    "test_add_one expects an integer".to_string(),
+                ));
+            };
+            Ok(crate::Value::Numeric(crate::numeric::Numeric::Integer(
+                v + 1,
+            )))
         }
 
         fn register_catalog(
@@ -353,6 +417,118 @@ mod tests {
             .run_collect_rows()
             .unwrap();
         assert_eq!(rows.len(), 1);
+        conn.close().unwrap();
+    }
+
+    /// A dialect that resolves no functions at all, proving the dialect —
+    /// not the engine — owns the function name surface of user SQL.
+    struct NoFunctionsDialect;
+
+    impl SchemaDialect for NoFunctionsDialect {
+        fn name(&self) -> &'static str {
+            "nofuncs"
+        }
+
+        fn parse_table_sql(&self, sql: &str, root_page: i64) -> crate::Result<BTreeTable> {
+            BTreeTable::from_sql(sql, root_page)
+        }
+
+        fn format_table_sql(
+            &self,
+            _input: &str,
+            tbl_name: &turso_parser::ast::QualifiedName,
+            body: &turso_parser::ast::CreateTableBody,
+        ) -> crate::Result<String> {
+            Ok(format!(
+                "CREATE TABLE {} {}",
+                tbl_name.name.as_ident(),
+                body
+            ))
+        }
+
+        fn register_catalog(
+            &self,
+            schema: &mut crate::schema::Schema,
+            enable_custom_types: bool,
+        ) -> crate::Result<()> {
+            sqlite::register_builtin_catalog(schema, enable_custom_types)
+        }
+
+        fn resolve_function(
+            &self,
+            _name: &str,
+            _arg_count: usize,
+        ) -> crate::Result<Option<crate::function::Func>> {
+            Ok(None)
+        }
+    }
+
+    #[test]
+    fn dialect_scalar_function_resolves_and_executes() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let db = open_db(
+            &io,
+            "dialect-funcs.db",
+            Some(Arc::new(TestSchemaDialect::default())),
+        )
+        .unwrap();
+        let conn = db.connect().unwrap();
+
+        // Dialect-provided scalar executes through exec_scalar_function.
+        let rows = conn
+            .prepare("SELECT test_add_one(41)")
+            .unwrap()
+            .run_collect_rows()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![vec![crate::Value::Numeric(
+                crate::numeric::Numeric::Integer(42)
+            )]]
+        );
+
+        // Built-ins still resolve because the dialect composes with the
+        // shared table.
+        let rows = conn
+            .prepare("SELECT abs(-7)")
+            .unwrap()
+            .run_collect_rows()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![vec![crate::Value::Numeric(
+                crate::numeric::Numeric::Integer(7)
+            )]]
+        );
+
+        // Unknown names still error.
+        let err = conn.prepare("SELECT no_such_function(1)").unwrap_err();
+        assert!(err.to_string().contains("no such function"));
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn dialect_owns_the_function_surface() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let db = open_db(
+            &io,
+            "dialect-nofuncs.db",
+            Some(Arc::new(NoFunctionsDialect)),
+        )
+        .unwrap();
+        let conn = db.connect().unwrap();
+
+        // Function-free SQL works, including DDL (whose internal helper
+        // statements resolve with SQLite semantics regardless of dialect).
+        conn.execute("CREATE TABLE t (x INTEGER)").unwrap();
+        conn.execute("INSERT INTO t VALUES (-7)").unwrap();
+
+        // A SQLite built-in is not part of this dialect's surface.
+        let err = conn.prepare("SELECT abs(x) FROM t").unwrap_err();
+        assert!(
+            err.to_string().contains("no such function"),
+            "unexpected error: {err}"
+        );
         conn.close().unwrap();
     }
 

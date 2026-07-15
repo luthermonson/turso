@@ -884,6 +884,7 @@ impl Statement {
                 &syms,
                 mode,
                 &self.program.sql,
+                self.origin,
             )?
         };
 

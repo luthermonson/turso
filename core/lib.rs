@@ -85,7 +85,7 @@ mod vdbe;
 mod vtab;
 
 #[cfg(any(feature = "fuzz", feature = "bench"))]
-pub use function::MathFunc;
+pub use function::{Func, MathFunc};
 
 use crate::{
     busy::{BusyHandler, BusyHandlerCallback},
