@@ -12688,6 +12688,7 @@ fn op_parse_schema_step(
                     &mut inner.dbsp_state_index_roots,
                     &mut inner.materialized_view_info,
                     &attached_resolver,
+                    conn.schema_dialect().as_ref(),
                 )?;
                 continue;
             }

@@ -1390,6 +1390,7 @@ impl Connection {
                         &mut inner.fresh,
                         &self.syms.read(),
                         &attached_resolver,
+                        self.db.schema_dialect().as_ref(),
                     ));
 
                     // Rehydrate built-in table-valued functions captured at init.
@@ -2739,6 +2740,7 @@ impl Connection {
                     &mut dbsp_state_index_roots,
                     &mut materialized_view_info,
                     &attached_resolver,
+                    self.db.schema_dialect().as_ref(),
                 ) {
                     Ok(()) => {}
                     Err(LimboError::ParseError(msg)) if msg.contains("already exists") => {}
@@ -2794,6 +2796,11 @@ impl Connection {
         let pragma = format!("PRAGMA {pragma_name} = {pragma_value}");
         let mut stmt = self.prepare(pragma)?;
         stmt.run_collect_rows()
+    }
+
+    /// The schema dialect of the database this connection belongs to.
+    pub fn schema_dialect(&self) -> Arc<dyn crate::SchemaDialect> {
+        self.db.schema_dialect()
     }
 
     pub fn experimental_views_enabled(&self) -> bool {

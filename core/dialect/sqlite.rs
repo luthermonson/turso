@@ -1,15 +1,31 @@
-//! Built-in SQLite-style catalog tables.
+//! The SQLite schema dialect and built-in SQLite-style catalog tables.
 //!
-//! `pragma_*` table-valued functions, `json_each`/`json_tree`,
-//! `sqlite_dbpage`, `btree_dump`, and `sqlite_turso_types`. Registered into
-//! every fresh schema by [`crate::schema::Schema::with_options`] through
-//! [`register_builtin_catalog`].
+//! [`SqliteSchemaDialect`] is the default [`super::SchemaDialect`]: schema
+//! rows are plain SQLite text parsed with the SQLite parser. The catalog
+//! tables here (`pragma_*` table-valued functions, `json_each`/`json_tree`,
+//! `sqlite_dbpage`, `btree_dump`, and `sqlite_turso_types`) are registered
+//! into every fresh schema by [`crate::schema::Schema::with_options`]
+//! through [`register_builtin_catalog`].
 
 use crate::pragma::PragmaVirtualTable;
-use crate::schema::{Schema, Table};
+use crate::schema::{BTreeTable, Schema, Table};
 use crate::sync::Arc;
 use crate::vtab::{VirtualTable, VirtualTableType};
 use turso_ext::VTabKind;
+
+/// The default schema dialect: `sqlite_schema` rows are canonical SQLite
+/// text.
+pub struct SqliteSchemaDialect;
+
+impl super::SchemaDialect for SqliteSchemaDialect {
+    fn name(&self) -> &'static str {
+        "sqlite"
+    }
+
+    fn parse_table_sql(&self, sql: &str, root_page: i64) -> crate::Result<BTreeTable> {
+        BTreeTable::from_sql(sql, root_page)
+    }
+}
 
 /// Insert the standard SQLite-style catalog tables into `schema`.
 ///

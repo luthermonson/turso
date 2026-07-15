@@ -48,7 +48,7 @@ pub(crate) mod thread;
 
 mod assert;
 mod connection;
-mod dialect;
+pub mod dialect;
 mod error;
 mod ext;
 mod fast_lock;
@@ -136,6 +136,7 @@ use turso_parser::{ast, ast::Cmd, parser::Parser};
 
 pub use connection::{resolve_ext_path, Connection, Row, StepResult, SymbolTable};
 pub(crate) use connection::{AtomicTransactionState, TransactionState};
+pub use dialect::{SchemaDialect, SqliteSchemaDialect};
 pub use error::{io_error, CompletionError, LimboError};
 pub use function::ContextCollationFunction;
 #[cfg(feature = "io_memory_yield")]
@@ -622,6 +623,10 @@ pub struct Database<A: alloc::ConcurrentAllocator = alloc::DynAllocator> {
     // Use parking lot RwLock here and not `crate::sync::RwLock` because it relies on `data_ptr` and that is experimental
     // in std.
     builtin_syms: parking_lot::RwLock<SymbolTable>,
+    /// Schema dialect used to interpret `sqlite_schema` SQL rows. Fixed at
+    /// open time ([`SqliteSchemaDialect`] by default) and shared by all
+    /// connections because the parsed [`Schema`] is shared per database.
+    schema_dialect: Arc<dyn SchemaDialect>,
     opts: DatabaseOpts,
     n_connections: AtomicUsize,
 
@@ -705,6 +710,7 @@ impl Database {
         db_file: Arc<dyn DatabaseStorage>,
         encryption_opts: Option<EncryptionOpts>,
         mv_store_allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<Self> {
         let path = path.into();
         let wal_path = wal_path.into();
@@ -751,6 +757,8 @@ impl Database {
             shared_wal_coordination: OnceLock::new(),
             db_file,
             builtin_syms: parking_lot::RwLock::new(syms),
+            schema_dialect: schema_dialect
+                .unwrap_or_else(|| Arc::new(SqliteSchemaDialect) as Arc<dyn SchemaDialect>),
             io: io.clone(),
             open_flags: flags,
             init_lock: Arc::new(Mutex::new(())),
@@ -933,6 +941,23 @@ impl Database {
         Ok(())
     }
 
+    /// Check that a registry hit was opened with the schema dialect the
+    /// caller requested (`None` means the default SQLite dialect). The
+    /// dialect is fixed at open time and shared by every user of the
+    /// registered instance, so a mismatch is an error rather than a silent
+    /// share.
+    fn check_registry_dialect(db: &Database, requested: Option<&dyn SchemaDialect>) -> Result<()> {
+        let requested_name = requested.map_or_else(|| SqliteSchemaDialect.name(), |d| d.name());
+        if db.schema_dialect.name() != requested_name {
+            return Err(LimboError::InvalidArgument(format!(
+                "database is already open with schema dialect '{}'; requested '{}'",
+                db.schema_dialect.name(),
+                requested_name
+            )));
+        }
+        Ok(())
+    }
+
     /// Look up a database in the process-wide registry by file identity.
     /// Returns the cached Database if found, with encryption validation.
     /// This avoids opening a file (and acquiring a file lock) when the
@@ -966,6 +991,10 @@ impl Database {
                 "Database is encrypted but no encryption options provided".to_string(),
             ));
         }
+
+        // The file-open entry points always request the default dialect;
+        // reject the cached instance if it was opened with another one.
+        Self::check_registry_dialect(&db, None)?;
 
         Ok(Some(db))
     }
@@ -1065,6 +1094,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
+            None,
         )
     }
 
@@ -1078,6 +1108,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<Arc<Database>> {
         let mut state = OpenDbAsyncState::new();
         loop {
@@ -1091,6 +1122,7 @@ impl Database {
                 encryption_opts.clone(),
                 durable_storage.clone(),
                 allocator.clone(),
+                schema_dialect.clone(),
             )? {
                 IOResult::Done(db) => return Ok(db),
                 IOResult::IO(io_completion) => {
@@ -1134,6 +1166,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
+            None,
         )
     }
 
@@ -1148,6 +1181,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<IOResult<Arc<Database>>> {
         let result = Self::open_with_flags_async_internal(
             state,
@@ -1159,6 +1193,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             allocator,
+            schema_dialect,
         );
         if result.is_err() {
             // On error, remove the Opening sentinel so other callers can proceed.
@@ -1181,6 +1216,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<IOResult<Arc<Database>>> {
         // turso-sync-engine creates 2 databases with different names in the same IO if MemoryIO is used
         // in this case we need to bypass registry (as this is MemoryIO DB) but also preserve original distinction in names (e.g. :memory:-draft and :memory:-synced)
@@ -1207,6 +1243,7 @@ impl Database {
                                         .to_string(),
                                 ));
                             }
+                            Self::check_registry_dialect(&db, schema_dialect.as_deref())?;
                             return Ok(IOResult::Done(db));
                         }
                         // Weak ref expired — treat as absent, fall through to insert Opening.
@@ -1242,6 +1279,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             allocator,
+            schema_dialect,
         )?;
 
         if let IOResult::Done(ref db) = result {
@@ -1267,6 +1305,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<IOResult<Arc<Database>>> {
         let result = Self::open_with_flags_bypass_registry_async_internal(
             state,
@@ -1279,6 +1318,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             allocator,
+            schema_dialect,
         );
         if result.is_err() {
             let _ = state.schema_guard.take();
@@ -1344,6 +1384,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
+            None,
         );
         if result.is_err() {
             // schema_guard is set by the open_with_flags_bypass_registry_async_internal - so we release it in case of error
@@ -1365,6 +1406,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
+        schema_dialect: Option<Arc<dyn SchemaDialect>>,
     ) -> Result<IOResult<Arc<Database>>> {
         loop {
             tracing::debug!(
@@ -1394,6 +1436,7 @@ impl Database {
                         db_file.clone(),
                         encryption_opts.clone(),
                         allocator.clone(),
+                        schema_dialect.clone(),
                     )?;
                     db.durable_storage.clone_from(&durable_storage);
 
@@ -1498,11 +1541,13 @@ impl Database {
                     // it's not ideal but correctness is OK - before prepare connection call maybe_update_schema and in case of divergence update schema ref from the db + we always check connection cookie in the VDBE program itself
                     let schema = Schema::try_make_mut(guard)?;
 
+                    let dialect = conn.schema_dialect();
                     let result = schema.make_from_btree(
                         &mut state.make_from_btree_state,
                         None,
                         pager,
                         &syms,
+                        dialect.as_ref(),
                     );
 
                     match result {
@@ -2896,6 +2941,11 @@ impl Database {
     {
         self.with_schema_mut(|schema| schema.register_internal_vtab(table))
     }
+    /// The schema dialect this database was opened with.
+    pub fn schema_dialect(&self) -> Arc<dyn SchemaDialect> {
+        self.schema_dialect.clone()
+    }
+
     pub(crate) fn clone_schema(&self) -> Arc<Schema> {
         let schema = self.schema.lock();
         schema.clone()
