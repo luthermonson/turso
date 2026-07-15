@@ -56,6 +56,23 @@ pub trait SchemaDialect: Send + Sync + 'static {
         tbl_name: &turso_parser::ast::QualifiedName,
         body: &turso_parser::ast::CreateTableBody,
     ) -> crate::Result<String>;
+
+    /// Install the dialect's catalog tables into a freshly constructed
+    /// schema.
+    ///
+    /// Called by [`crate::schema::Schema::with_options`] on every schema
+    /// construction and rebuild, so catalog tables survive rebuilds
+    /// structurally instead of being re-registered by hand. The SQLite
+    /// dialect registers the standard built-in catalog here; other
+    /// dialects typically compose with it via
+    /// [`sqlite::register_builtin_catalog`] and then add their own tables
+    /// (constructed with [`crate::VirtualTable::new_internal`], which
+    /// requires no connection).
+    fn register_catalog(
+        &self,
+        schema: &mut crate::schema::Schema,
+        enable_custom_types: bool,
+    ) -> crate::Result<()>;
 }
 
 #[cfg(test)]
@@ -94,6 +111,99 @@ mod tests {
             _body: &turso_parser::ast::CreateTableBody,
         ) -> crate::Result<String> {
             Ok(format!("/* test */ {input}"))
+        }
+
+        fn register_catalog(
+            &self,
+            schema: &mut crate::schema::Schema,
+            enable_custom_types: bool,
+        ) -> crate::Result<()> {
+            sqlite::register_builtin_catalog(schema, enable_custom_types)?;
+            let vtab = crate::VirtualTable::new_internal(
+                "test_catalog".to_string(),
+                "CREATE TABLE test_catalog (value INTEGER)".to_string(),
+                turso_ext::VTabKind::VirtualTable,
+                Arc::new(crate::sync::RwLock::new(TestCatalogTable)),
+            )?;
+            schema.add_virtual_table(Arc::new(vtab))
+        }
+    }
+
+    /// A one-row catalog table installed by [`TestSchemaDialect`],
+    /// standing in for a frontend catalog surface like `pg_class`.
+    #[derive(Debug)]
+    struct TestCatalogTable;
+
+    impl crate::InternalVirtualTable for TestCatalogTable {
+        fn name(&self) -> String {
+            "test_catalog".to_string()
+        }
+
+        fn sql(&self) -> String {
+            "CREATE TABLE test_catalog (value INTEGER)".to_string()
+        }
+
+        fn open(
+            &self,
+            _conn: Arc<crate::Connection>,
+        ) -> crate::Result<Arc<crate::sync::RwLock<dyn crate::InternalVirtualTableCursor>>>
+        {
+            Ok(Arc::new(crate::sync::RwLock::new(TestCatalogCursor {
+                row: 0,
+            })))
+        }
+
+        fn best_index(
+            &self,
+            constraints: &[turso_ext::ConstraintInfo],
+            _order_by: &[turso_ext::OrderByInfo],
+        ) -> std::result::Result<turso_ext::IndexInfo, turso_ext::ResultCode> {
+            Ok(turso_ext::IndexInfo {
+                idx_num: 0,
+                idx_str: None,
+                order_by_consumed: false,
+                estimated_cost: 1.0,
+                estimated_rows: 1,
+                constraint_usages: constraints
+                    .iter()
+                    .map(|_| turso_ext::ConstraintUsage {
+                        argv_index: None,
+                        omit: false,
+                    })
+                    .collect(),
+            })
+        }
+    }
+
+    struct TestCatalogCursor {
+        row: usize,
+    }
+
+    impl crate::InternalVirtualTableCursor for TestCatalogCursor {
+        fn filter(
+            &mut self,
+            _args: &[crate::Value],
+            _idx_str: Option<String>,
+            _idx_num: i32,
+        ) -> crate::Result<bool> {
+            self.row = 0;
+            Ok(true)
+        }
+
+        fn next(&mut self) -> crate::Result<bool> {
+            self.row += 1;
+            Ok(self.row < 1)
+        }
+
+        fn rowid(&self) -> i64 {
+            self.row as i64
+        }
+
+        fn column(&self, column: usize) -> crate::Result<crate::Value> {
+            match column {
+                0 => Ok(crate::Value::Numeric(crate::numeric::Numeric::Integer(42))),
+                _ => Ok(crate::Value::Null),
+            }
         }
     }
 
@@ -144,6 +254,53 @@ mod tests {
         conn.execute("INSERT INTO t VALUES (1)").unwrap();
         conn.execute("INSERT INTO u VALUES (2)").unwrap();
         conn.close().unwrap();
+    }
+
+    #[test]
+    fn dialect_catalog_available_on_every_schema_and_rebuild() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let db = open_db(
+            &io,
+            "dialect-catalog.db",
+            Some(Arc::new(TestSchemaDialect::default())),
+        )
+        .unwrap();
+
+        let query_catalog = |conn: &Arc<crate::Connection>| -> Vec<Vec<crate::Value>> {
+            conn.prepare("SELECT value FROM test_catalog")
+                .unwrap()
+                .run_collect_rows()
+                .unwrap()
+        };
+
+        let conn1 = db.connect().unwrap();
+        let conn2 = db.connect().unwrap();
+        assert_eq!(
+            query_catalog(&conn1),
+            vec![vec![crate::Value::Numeric(
+                crate::numeric::Numeric::Integer(42)
+            )]]
+        );
+        assert_eq!(
+            query_catalog(&conn2),
+            vec![vec![crate::Value::Numeric(
+                crate::numeric::Numeric::Integer(42)
+            )]]
+        );
+
+        // DDL on another connection forces conn1 to rebuild its schema from
+        // sqlite_schema; the catalog table must survive because schema
+        // construction re-registers it.
+        conn2.execute("CREATE TABLE t (x INTEGER)").unwrap();
+        assert_eq!(
+            query_catalog(&conn1),
+            vec![vec![crate::Value::Numeric(
+                crate::numeric::Numeric::Integer(42)
+            )]]
+        );
+
+        conn1.close().unwrap();
+        conn2.close().unwrap();
     }
 
     #[test]

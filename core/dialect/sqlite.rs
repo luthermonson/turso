@@ -43,6 +43,14 @@ impl super::SchemaDialect for SqliteSchemaDialect {
             }
         }
     }
+
+    fn register_catalog(
+        &self,
+        schema: &mut Schema,
+        enable_custom_types: bool,
+    ) -> crate::Result<()> {
+        register_builtin_catalog(schema, enable_custom_types)
+    }
 }
 
 /// Insert the standard SQLite-style catalog tables into `schema`.

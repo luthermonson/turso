@@ -332,6 +332,7 @@ impl CompiledExpression {
             syms,
             true,
             DoubleQuotedDml::Enabled,
+            std::sync::Arc::new(crate::dialect::SqliteSchemaDialect),
         );
 
         // Translate the transformed expression to bytecode

@@ -110,7 +110,6 @@ use crate::{
     },
     translate::{emitter::TransactionMode, pragma::TURSO_CDC_DEFAULT_TABLE_NAME},
     vdbe::metrics::ConnectionMetrics,
-    vtab::VirtualTable,
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
 use core::str;
@@ -184,7 +183,7 @@ pub use vdbe::{
     builder::QueryMode, explain::EXPLAIN_COLUMNS, explain::EXPLAIN_QUERY_PLAN_COLUMNS,
     FromValueRow, PrepareContext, PreparedProgram, Program, Register,
 };
-pub use vtab::{InternalVirtualTable, InternalVirtualTableCursor};
+pub use vtab::{InternalVirtualTable, InternalVirtualTableCursor, VirtualTable};
 
 /// Database index for the main database (always 0 in SQLite).
 pub const MAIN_DB_ID: usize = 0;
@@ -741,13 +740,17 @@ impl Database {
             None
         };
 
+        let schema_dialect = schema_dialect
+            .unwrap_or_else(|| Arc::new(SqliteSchemaDialect) as Arc<dyn SchemaDialect>);
+
         let db = Database {
             mv_store,
             mv_store_allocator,
             path,
             wal_path,
             schema: Arc::new(Mutex::new(Arc::new({
-                let mut s = Schema::with_options(opts.enable_custom_types)?;
+                let mut s =
+                    Schema::with_options(opts.enable_custom_types, schema_dialect.as_ref())?;
                 s.generated_columns_enabled = opts.enable_generated_columns;
                 s
             }))),
@@ -757,8 +760,7 @@ impl Database {
             shared_wal_coordination: OnceLock::new(),
             db_file,
             builtin_syms: parking_lot::RwLock::new(syms),
-            schema_dialect: schema_dialect
-                .unwrap_or_else(|| Arc::new(SqliteSchemaDialect) as Arc<dyn SchemaDialect>),
+            schema_dialect,
             io: io.clone(),
             open_flags: flags,
             init_lock: Arc::new(Mutex::new(())),
