@@ -872,6 +872,7 @@ fn test_db_share_same_file() {
         turso_core::DatabaseOpts::new(),
         None,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
     let conn1 = db1.connect().unwrap();
@@ -899,6 +900,7 @@ fn test_db_share_same_file() {
         turso_core::OpenFlags::default(),
         turso_core::DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
     let conn2 = db2.connect().unwrap();

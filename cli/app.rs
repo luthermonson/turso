@@ -256,7 +256,11 @@ impl Limbo {
         let db_file = normalize_db_path(db_file);
 
         let (io, conn) = if db_file.starts_with("file:") {
-            Connection::from_uri(&db_file, db_opts)?
+            Connection::from_uri(
+                &db_file,
+                db_opts,
+                std::sync::Arc::new(turso_core::SqliteDialect),
+            )?
         } else {
             let flags = if opts.readonly {
                 OpenFlags::default().union(OpenFlags::ReadOnly)
@@ -269,6 +273,7 @@ impl Limbo {
                 flags,
                 db_opts.turso_cli(),
                 None,
+                std::sync::Arc::new(turso_core::SqliteDialect),
             )?;
             let conn = db.connect()?;
             (io, conn)
@@ -468,7 +473,11 @@ impl Limbo {
     fn open_db(&mut self, path: &str, vfs_name: Option<&str>) -> anyhow::Result<()> {
         self.conn.close()?;
         let (io, db) = if let Some(vfs_name) = vfs_name {
-            self.conn.open_new(path, vfs_name)?
+            self.conn.open_new(
+                path,
+                vfs_name,
+                std::sync::Arc::new(turso_core::SqliteDialect),
+            )?
         } else {
             let io = {
                 match path {
@@ -484,6 +493,7 @@ impl Limbo {
                     OpenFlags::default(),
                     self.db_opts,
                     None,
+                    std::sync::Arc::new(turso_core::SqliteDialect),
                 )?,
             )
         };
@@ -2028,7 +2038,11 @@ impl Limbo {
             anyhow::bail!("Refusing to overwrite existing file: {output_file}");
         }
         let io: Arc<dyn turso_core::IO> = Arc::new(turso_core::PlatformIO::new()?);
-        let db = Database::open_file(io.clone(), output_file)?;
+        let db = Database::open_file(
+            io.clone(),
+            output_file,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         let target = db.connect()?;
 
         let mut applier = ApplyWriter::new(&target);

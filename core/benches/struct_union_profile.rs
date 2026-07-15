@@ -13,8 +13,15 @@ fn setup_db() -> (Arc<Database>, Arc<turso_core::Connection>) {
     let opts = DatabaseOpts::new().with_custom_types(true);
     #[allow(clippy::arc_with_non_send_sync)]
     let io = Arc::new(MemoryIO::new());
-    let db =
-        Database::open_file_with_flags(io, ":memory:", OpenFlags::default(), opts, None).unwrap();
+    let db = Database::open_file_with_flags(
+        io,
+        ":memory:",
+        OpenFlags::default(),
+        opts,
+        None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let conn = db.connect().unwrap();
     (db, conn)
 }

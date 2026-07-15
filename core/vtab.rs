@@ -692,6 +692,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let name = db
@@ -735,6 +736,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let name = db

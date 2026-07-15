@@ -40,6 +40,7 @@ fn enable_mvcc_on_attached_dbs(io: &Arc<dyn SimIO>, aux_paths: impl Iterator<Ite
                 .with_attach(true)
                 .with_generated_columns(true),
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .unwrap_or_else(|e| panic!("Failed to open aux DB {aux_path:?}: {e}"));
         let aux_conn = aux_db
@@ -1172,6 +1173,7 @@ impl SimulatorEnv {
                 .with_attach(true)
                 .with_generated_columns(true),
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         ) {
             Ok(db) => db,
             Err(e) => {
@@ -1393,6 +1395,7 @@ impl SimulatorEnv {
                 .with_attach(true)
                 .with_generated_columns(true),
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         ) {
             Ok(db) => db,
             Err(e) => {

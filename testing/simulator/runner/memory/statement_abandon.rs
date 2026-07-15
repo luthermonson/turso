@@ -35,6 +35,7 @@ fn open_conn(io: Arc<MemorySimIO>, path: &str) -> Result<Arc<Connection>> {
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let conn = db.connect()?;
     Ok(conn)
@@ -47,6 +48,7 @@ fn open_two_conns(io: Arc<MemorySimIO>, path: &str) -> Result<(Arc<Connection>, 
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let conn1 = db.connect()?;
     let conn2 = db.connect()?;

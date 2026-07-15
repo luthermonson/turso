@@ -801,6 +801,7 @@ impl TursoDatabase {
                         opts,
                         self.config.encryption.clone(),
                         None,
+                        std::sync::Arc::new(turso_core::SqliteDialect),
                     )? {
                         IOResult::Done(db) => {
                             let mut inner_db = self.db.lock().unwrap();

@@ -930,6 +930,7 @@ fn reopen_database(env: &mut SimulatorEnv) {
                     .with_attach(true)
                     .with_generated_columns(true),
                 None,
+                std::sync::Arc::new(turso_core::SqliteDialect),
             ) {
                 Ok(db) => db,
                 Err(e) => {

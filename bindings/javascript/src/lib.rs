@@ -332,6 +332,7 @@ fn connect_sync(db: &DatabaseInner) -> napi::Result<()> {
         flags,
         core_opts,
         encryption_opts,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .map_err(|e| to_generic_error(&format!("failed to open database {}", db.path), e))?;
 

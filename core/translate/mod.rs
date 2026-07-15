@@ -516,7 +516,8 @@ mod tests {
     #[test]
     fn test_regexp_no_function_registered() {
         let io = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io, ":memory:").unwrap();
+        let db =
+            Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
         let conn = db.connect().unwrap();
         let schema = db.schema.lock().clone();
         let pager = conn.pager.load().clone();
@@ -549,7 +550,8 @@ mod tests {
     #[test]
     fn test_insert_autoincrement_with_malformed_sqlite_sequence_is_corrupt() {
         let io = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io, ":memory:").unwrap();
+        let db =
+            Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
         let conn = db.connect().unwrap();
         conn.execute("CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)")
             .unwrap();
@@ -593,7 +595,8 @@ mod tests {
     #[test]
     fn test_insert_autoincrement_with_missing_sqlite_sequence_is_corrupt() {
         let io = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io, ":memory:").unwrap();
+        let db =
+            Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
         let conn = db.connect().unwrap();
         conn.execute("CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)")
             .unwrap();
@@ -627,7 +630,8 @@ mod tests {
     #[test]
     fn test_trigger_compile_error_does_not_poison_future_insert_compilation() {
         let io = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io, ":memory:").unwrap();
+        let db =
+            Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
         let conn = db.connect().unwrap();
 
         conn.execute("CREATE TABLE ref(x);").unwrap();

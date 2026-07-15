@@ -38,6 +38,7 @@ fn test_concurrent_commit_no_yield_spin() {
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("open db");
 

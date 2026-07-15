@@ -163,6 +163,7 @@ fn test_fresh_attach_inherits_mvcc_before_first_write(_tmp_db: TempDatabase) -> 
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let aux_conn = aux_db.connect()?;
     assert!(aux_conn.mvcc_enabled());
@@ -184,6 +185,7 @@ fn test_attach_rejects_initialized_page_size_mismatch(_tmp_db: TempDatabase) -> 
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let aux_conn = aux_db.connect()?;
     aux_conn.execute("CREATE TABLE t(x INTEGER)")?;
@@ -289,6 +291,7 @@ fn test_fresh_mvcc_attach_rejects_custom_durable_storage_without_attached_backen
         DatabaseOpts::new().with_attach(true),
         None,
         Some(durable_storage),
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let conn = db.connect()?;
     conn.pragma_update("journal_mode", "'mvcc'")?;

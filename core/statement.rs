@@ -1505,6 +1505,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         db.connect()
     }

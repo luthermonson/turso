@@ -408,7 +408,11 @@ impl TursoMcpServer {
 
         // Open the new database connection
         let conn = if path == ":memory:" || path.contains([':', '?', '&', '#']) {
-            match Connection::from_uri(&path, DatabaseOpts::default()) {
+            match Connection::from_uri(
+                &path,
+                DatabaseOpts::default(),
+                std::sync::Arc::new(turso_core::SqliteDialect),
+            ) {
                 Ok((_io, c)) => c,
                 Err(e) => return format!("Failed to open database '{path}': {e}"),
             }
@@ -419,6 +423,7 @@ impl TursoMcpServer {
                 OpenFlags::default(),
                 DatabaseOpts::new().with_autovacuum(false),
                 None,
+                std::sync::Arc::new(turso_core::SqliteDialect),
             ) {
                 Ok((_io, db)) => match db.connect() {
                     Ok(c) => c,

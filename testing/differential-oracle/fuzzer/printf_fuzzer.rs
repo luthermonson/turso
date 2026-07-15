@@ -275,8 +275,11 @@ impl FuzzerState {
         }
 
         let io = Arc::new(MemorySimIO::new(seed));
-        let turso_db =
-            Database::open_file(io.clone(), out_dir.join("printf-test.db").to_str().unwrap())?;
+        let turso_db = Database::open_file(
+            io.clone(),
+            out_dir.join("printf-test.db").to_str().unwrap(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         let turso_conn = turso_db.connect()?;
 
         let sqlite_conn =

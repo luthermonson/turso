@@ -220,6 +220,7 @@ impl TempDatabaseBuilder {
             flags,
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .unwrap();
 
@@ -297,7 +298,12 @@ impl TempDatabase {
 
     pub fn limbo_database(&self) -> Arc<turso_core::Database> {
         log::debug!("conneting to limbo");
-        Database::open_file(self.io.clone(), self.path.to_str().unwrap()).unwrap()
+        Database::open_file(
+            self.io.clone(),
+            self.path.to_str().unwrap(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )
+        .unwrap()
     }
 
     #[allow(dead_code)]
@@ -948,7 +954,7 @@ mod tests {
         // Open database
         #[allow(clippy::arc_with_non_send_sync)]
         let io: Arc<dyn IO> = Arc::new(turso_core::PlatformIO::new().unwrap());
-        let db = Database::open_file(io, &db_path)?;
+        let db = Database::open_file(io, &db_path, std::sync::Arc::new(turso_core::SqliteDialect))?;
 
         const NUM_CONNECTIONS: usize = 5;
         let mut connections = Vec::new();

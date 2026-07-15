@@ -271,6 +271,7 @@ impl MultiprocessWhopper {
                 OpenFlags::default(),
                 DatabaseOpts::new().with_multiprocess_wal(true),
                 None,
+                std::sync::Arc::new(turso_core::SqliteDialect),
             )?;
             let conn = db.connect()?;
 

@@ -404,6 +404,7 @@ mod tests {
                 unsafe_testing: false,
             },
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let conn = db.connect()?;
 

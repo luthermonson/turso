@@ -67,6 +67,7 @@ fn open_with_limbo_and_check(db_path: &Path, enable_mvcc: bool) -> (u8, u8) {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database with limbo");
 
@@ -315,6 +316,7 @@ fn test_pragma_journal_mode_wal_to_mvcc_with_pending_wal() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("Failed to open database with limbo (non-MVCC)");
 
@@ -348,6 +350,7 @@ fn test_pragma_journal_mode_wal_to_mvcc_with_pending_wal() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database with limbo (MVCC enabled)");
 
@@ -424,6 +427,7 @@ fn test_pragma_journal_mode_mvcc_to_wal() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("Failed to open database with limbo");
 
@@ -457,6 +461,7 @@ fn test_pragma_journal_mode_mvcc_to_wal() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open MVCC database with limbo");
 
@@ -533,6 +538,7 @@ fn test_pragma_journal_mode_multiple_switches() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database");
 
@@ -642,6 +648,7 @@ fn test_pragma_journal_mode_query() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database");
 
@@ -669,6 +676,7 @@ fn test_pragma_journal_mode_query() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database");
 
@@ -715,6 +723,7 @@ fn test_pragma_journal_mode_data_persistence_after_switch() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("Failed to open database");
 
@@ -743,6 +752,7 @@ fn test_pragma_journal_mode_data_persistence_after_switch() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("Failed to reopen database");
 
@@ -776,6 +786,7 @@ fn open_with_limbo_readonly_and_check(db_path: &Path, enable_mvcc: bool) -> (u8,
         OpenFlags::ReadOnly,
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database with limbo in readonly mode");
 
@@ -904,6 +915,7 @@ fn test_readonly_pragma_journal_mode_cannot_change() {
         OpenFlags::ReadOnly,
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open database in readonly mode");
 
@@ -954,6 +966,7 @@ fn test_readonly_mvcc_db_can_be_read() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("Failed to open database");
 
@@ -986,6 +999,7 @@ fn test_readonly_mvcc_db_can_be_read() {
         OpenFlags::ReadOnly,
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .expect("Failed to open MVCC database in readonly mode");
 
@@ -1058,6 +1072,7 @@ fn test_utf16_db_returns_unsupported_encoding_error() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     );
 
     assert!(

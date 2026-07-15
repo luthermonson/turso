@@ -105,7 +105,12 @@ fn bench_count(criterion: &mut Criterion) {
     for (label, sql) in QUERIES {
         #[allow(clippy::arc_with_non_send_sync)]
         let io = Arc::new(PlatformIO::new().unwrap());
-        let db = Database::open_file(io, path.to_str().unwrap()).unwrap();
+        let db = Database::open_file(
+            io,
+            path.to_str().unwrap(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )
+        .unwrap();
         let conn = db.connect().unwrap();
         // Cache sized to hold the ~15MB covering index (the queries' whole working set) so the
         // measurement is CPU-bound, while staying small enough to avoid paging under memory

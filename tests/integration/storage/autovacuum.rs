@@ -33,6 +33,7 @@ fn test_autovacuum_readonly_behavior() {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .unwrap();
 

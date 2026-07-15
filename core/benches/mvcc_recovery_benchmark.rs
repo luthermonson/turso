@@ -35,6 +35,7 @@ impl RecoveryFixture {
             OpenFlags::default(),
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .unwrap();
         black_box(&db);
@@ -57,6 +58,7 @@ fn build_mvcc_db_with_log(populate: impl FnOnce(&Arc<turso_core::Connection>)) -
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
     let conn = db.connect().unwrap();

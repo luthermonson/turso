@@ -466,6 +466,7 @@ mod tests {
             turso_core::OpenFlags::default(),
             turso_core::DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .unwrap();
         let turso_conn = turso_db.connect().unwrap();

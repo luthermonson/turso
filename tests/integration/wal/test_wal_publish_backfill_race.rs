@@ -63,7 +63,12 @@ struct Setup {
 
 fn setup(park: usize) -> Setup {
     let io = Arc::new(QueuedIo::new());
-    let db = Database::open_file(io.clone(), "publish-backfill-race.db").unwrap();
+    let db = Database::open_file(
+        io.clone(),
+        "publish-backfill-race.db",
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let a = db.connect().unwrap();
     let b = db.connect().unwrap();
 
@@ -163,7 +168,12 @@ fn assert_integrity_ok(conn: &Arc<Connection>, context: &str) {
 
 fn setup_hidden_root_reuse(park: usize) -> Setup {
     let io = Arc::new(QueuedIo::new());
-    let db = Database::open_file(io.clone(), "publish-backfill-hidden-root-race.db").unwrap();
+    let db = Database::open_file(
+        io.clone(),
+        "publish-backfill-hidden-root-race.db",
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let a = db.connect().unwrap();
     let b = db.connect().unwrap();
 
@@ -237,7 +247,12 @@ fn setup_hidden_root_reuse(park: usize) -> Setup {
 
 fn total_commit_io_pumps_hidden_root_reuse() -> usize {
     let io = Arc::new(QueuedIo::new());
-    let db = Database::open_file(io.clone(), "publish-backfill-hidden-root-race-dry.db").unwrap();
+    let db = Database::open_file(
+        io.clone(),
+        "publish-backfill-hidden-root-race-dry.db",
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let a = db.connect().unwrap();
     let b = db.connect().unwrap();
 
@@ -293,7 +308,12 @@ fn total_commit_io_pumps_hidden_root_reuse() -> usize {
 fn wal_stale_publish_backfill_hides_committed_rows() {
     let total_yields = {
         let io = Arc::new(QueuedIo::new());
-        let db = Database::open_file(io.clone(), "publish-backfill-race-dry.db").unwrap();
+        let db = Database::open_file(
+            io.clone(),
+            "publish-backfill-race-dry.db",
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )
+        .unwrap();
         let a = db.connect().unwrap();
         let b = db.connect().unwrap();
 
@@ -396,7 +416,12 @@ fn wal_stale_publish_backfill_hides_committed_rows() {
             drop(db);
             turso_core::clear_database_registry();
 
-            let db2 = Database::open_file(io, "publish-backfill-race.db").unwrap();
+            let db2 = Database::open_file(
+                io,
+                "publish-backfill-race.db",
+                std::sync::Arc::new(turso_core::SqliteDialect),
+            )
+            .unwrap();
             let c = db2.connect().unwrap();
             let mut stmt = c.prepare("PRAGMA integrity_check").unwrap();
             let mut msgs = Vec::new();
@@ -537,7 +562,12 @@ fn wal_stale_publish_backfill_can_point_table_at_restarted_index_root() {
         drop(db);
         turso_core::clear_database_registry();
 
-        let db2 = Database::open_file(io, "publish-backfill-hidden-root-race.db").unwrap();
+        let db2 = Database::open_file(
+            io,
+            "publish-backfill-hidden-root-race.db",
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )
+        .unwrap();
         let c = db2.connect().unwrap();
         if exec_ints(
             &c,

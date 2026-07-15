@@ -6534,6 +6534,7 @@ mod checkpoint_phase_tests {
             crate::OpenFlags::default(),
             crate::DatabaseOpts::new().with_multiprocess_wal(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         (db, dir)

@@ -381,7 +381,11 @@ fn plain_insert_step_to_done_commits(tmp_db: TempDatabase) -> anyhow::Result<()>
 #[test]
 fn dropping_explicit_commit_waiting_on_io_rolls_back_transaction() -> anyhow::Result<()> {
     let io = Arc::new(QueuedIo::new());
-    let db = Database::open_file(io, "queued-explicit-commit-drop.db")?;
+    let db = Database::open_file(
+        io,
+        "queued-explicit-commit-drop.db",
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )?;
     let conn = db.connect()?;
 
     conn.execute("CREATE TABLE t(x INTEGER)")?;

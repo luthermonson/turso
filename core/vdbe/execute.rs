@@ -12688,6 +12688,7 @@ fn op_parse_schema_step(
                     &mut inner.dbsp_state_index_roots,
                     &mut inner.materialized_view_info,
                     &attached_resolver,
+                    conn.dialect().as_ref(),
                 )?;
                 continue;
             }
@@ -16741,6 +16742,7 @@ fn op_vacuum_into_inner(
                     OpenFlags::Create,
                     output_opts,
                     None,
+                    std::sync::Arc::new(crate::SqliteDialect),
                 )?;
                 let output_conn = output_db.connect()?;
                 output_conn.reset_page_size(page_size)?;
@@ -16950,6 +16952,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17010,6 +17013,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17074,6 +17078,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_attach(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17135,6 +17140,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_vacuum(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17179,6 +17185,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_vacuum(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17730,6 +17737,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();

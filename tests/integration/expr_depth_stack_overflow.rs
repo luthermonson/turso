@@ -105,7 +105,11 @@ fn run_on_big_stack(sql: String) -> turso_core::Result<()> {
         .stack_size(WORKER_STACK)
         .spawn(move || -> turso_core::Result<()> {
             let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
-            let db = Database::open_file(io, ":memory:")?;
+            let db = Database::open_file(
+                io,
+                ":memory:",
+                std::sync::Arc::new(turso_core::SqliteDialect),
+            )?;
             let conn = db.connect()?;
             conn.execute(&sql)?;
             Ok(())

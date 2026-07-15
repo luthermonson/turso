@@ -37,10 +37,20 @@ fn bench_graph_queries(criterion: &mut Criterion) {
 
     #[allow(clippy::arc_with_non_send_sync)]
     let io = Arc::new(PlatformIO::new().unwrap());
-    let db = Database::open_file(io.clone(), DB_PATH).unwrap();
+    let db = Database::open_file(
+        io.clone(),
+        DB_PATH,
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let limbo_conn = db.connect().unwrap();
 
-    let db_analyzed = Database::open_file(io, DB_PATH_ANALYZED).unwrap();
+    let db_analyzed = Database::open_file(
+        io,
+        DB_PATH_ANALYZED,
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let limbo_conn_analyzed = db_analyzed.connect().unwrap();
 
     let queries = [

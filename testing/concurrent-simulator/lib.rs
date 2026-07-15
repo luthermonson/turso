@@ -711,6 +711,7 @@ impl Whopper {
                 OpenFlags::default(),
                 db_opts,
                 encryption_opts.clone(),
+                std::sync::Arc::new(turso_core::SqliteDialect),
             ) {
                 Ok(db) => db,
                 Err(e) => {
@@ -1527,6 +1528,7 @@ impl Whopper {
             OpenFlags::default(),
             db_opts,
             self.encryption_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .map_err(|e| anyhow::anyhow!("Database open failed: {}", e))?;
 

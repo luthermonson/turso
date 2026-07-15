@@ -95,6 +95,7 @@ fn setup_fts_db(temp_dir: &TempDir, row_count: usize) -> Arc<Database> {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
     let conn = db.connect().unwrap();

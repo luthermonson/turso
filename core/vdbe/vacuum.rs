@@ -298,6 +298,7 @@ pub(crate) fn open_vacuum_temp_db(
         OpenFlags::Create,
         vacuum_target_opts_from_source(source_db),
         encryption_opts,
+        std::sync::Arc::new(crate::SqliteDialect),
     )?;
     let conn = db.connect_with_encryption(encryption_key)?;
     conn.reset_page_size(page_size)?;
@@ -2697,7 +2698,7 @@ mod tests {
     #[test]
     fn replace_shared_schema_after_vacuum_replaces_wrapped_schema_cookie() -> Result<()> {
         let io: Arc<dyn crate::IO> = Arc::new(crate::MemoryIO::new());
-        let db = Database::open_file(io, ":memory:")?;
+        let db = Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect))?;
 
         db.with_schema_mut(|schema| {
             schema.schema_version = u32::MAX;
@@ -2721,7 +2722,7 @@ mod tests {
     #[test]
     fn install_committed_vacuum_image_updates_connection_and_shared_schema() -> Result<()> {
         let io: Arc<dyn crate::IO> = Arc::new(crate::MemoryIO::new());
-        let db = Database::open_file(io, ":memory:")?;
+        let db = Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect))?;
         let conn = db.connect()?;
 
         conn.with_schema_mut(|schema| {
@@ -2757,7 +2758,7 @@ mod tests {
     #[test]
     fn cleanup_after_published_vacuum_installs_committed_image() -> Result<()> {
         let io: Arc<dyn crate::IO> = Arc::new(crate::MemoryIO::new());
-        let db = Database::open_file(io, ":memory:")?;
+        let db = Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect))?;
         let conn = db.connect()?;
 
         conn.with_schema_mut(|schema| {
@@ -2810,6 +2811,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let source_conn = source_db.connect()?;
         // Source is uninitialized so its header reserved_space isn't usable.
@@ -2880,6 +2882,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let conn = db.connect()?;
         conn.set_sync_mode(crate::SyncMode::Off);
@@ -2923,6 +2926,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_vacuum(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let source_conn = source_db.connect()?;
         source_conn.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, payload TEXT)")?;
@@ -2944,6 +2948,7 @@ mod tests {
             OpenFlags::Create,
             vacuum_target_opts_from_source(&source_db),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let target_conn = target_db.connect()?;
         mirror_symbols(&source_conn, &target_conn);
@@ -3006,6 +3011,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_vacuum(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let conn = db.connect()?;
         conn.set_sync_mode(crate::SyncMode::Off);
@@ -3047,6 +3053,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new().with_vacuum(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let conn = db.connect()?;
         conn.set_sync_mode(crate::SyncMode::Off);
@@ -3087,6 +3094,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let source_conn = source_db.connect()?;
         let temp = open_vacuum_temp_db(&source_conn, &source_db, 4096, 0)?;
@@ -3140,6 +3148,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let source_conn = source_db.connect()?;
 
@@ -3175,6 +3184,7 @@ mod tests {
                 cipher: CipherMode::Aes256Gcm.to_string(),
                 hexkey: key_hex.to_string(),
             }),
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let source_conn = source_db.connect_with_encryption(Some(key))?;
         let reserved_space = source_conn
@@ -3207,6 +3217,7 @@ mod tests {
             OpenFlags::Create,
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         let target_conn = target_db.connect()?;
         target_conn.execute("CREATE TABLE seed(x)")?;

@@ -58,7 +58,8 @@ pub fn run_worker(
         db_path,
         OpenFlags::default(),
         db_opts,
-        None, // encryption_opts
+        None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
 
     if connections_per_process == 0 {

@@ -4020,6 +4020,7 @@ fn main() -> Result<()> {
         turso_core::OpenFlags::default(),
         turso_core::DatabaseOpts::default().with_custom_types(true),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let conn = turso_db.connect()?;
 

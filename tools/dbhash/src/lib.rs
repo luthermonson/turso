@@ -66,6 +66,7 @@ pub fn hash_database_with_database_opts(
         OpenFlags::default(),
         database_opts,
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
     let conn = db.connect()?;
 

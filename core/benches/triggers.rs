@@ -56,7 +56,12 @@ fn setup_limbo(temp_dir: &TempDir, stmts: &[&str]) -> Arc<Database> {
     let db_path = temp_dir.path().join("bench.db");
     #[allow(clippy::arc_with_non_send_sync)]
     let io = Arc::new(PlatformIO::new().unwrap());
-    let db = Database::open_file(io, db_path.to_str().unwrap()).unwrap();
+    let db = Database::open_file(
+        io,
+        db_path.to_str().unwrap(),
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    )
+    .unwrap();
     let conn = db.connect().unwrap();
 
     let mut stmt = conn.query("PRAGMA synchronous = OFF").unwrap().unwrap();

@@ -204,6 +204,7 @@ impl Fuzzer {
             turso_core::OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let turso_conn = turso_db.connect()?;
 

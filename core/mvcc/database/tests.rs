@@ -299,7 +299,8 @@ fn mv_store_insert_allocation_failure_leaves_tx_state_untouched() {
 impl MvccTestDb {
     pub fn new() -> Self {
         let io = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io, ":memory:").unwrap();
+        let db =
+            Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
         let conn = db.connect().unwrap();
         // Enable MVCC via PRAGMA
         conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
@@ -886,8 +887,15 @@ impl MvccTestDbNoConn {
     pub fn new() -> Self {
         let io = Arc::new(MemoryIO::new());
         let opts = DatabaseOpts::new();
-        let db = Database::open_file_with_flags(io, ":memory:", OpenFlags::default(), opts, None)
-            .unwrap();
+        let db = Database::open_file_with_flags(
+            io,
+            ":memory:",
+            OpenFlags::default(),
+            opts,
+            None,
+            std::sync::Arc::new(crate::SqliteDialect),
+        )
+        .unwrap();
         // Enable MVCC via PRAGMA
         let conn = db.connect().unwrap();
         conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
@@ -929,6 +937,7 @@ impl MvccTestDbNoConn {
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         // Enable MVCC via PRAGMA
@@ -960,6 +969,7 @@ impl MvccTestDbNoConn {
             OpenFlags::default(),
             opts,
             Some(enc_opts.clone()),
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let encryption_key = EncryptionKey::from_hex_string(hex_key).unwrap();
@@ -1017,6 +1027,7 @@ impl MvccTestDbNoConn {
             OpenFlags::default(),
             opts,
             Some(enc_opts.clone()),
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let encryption_key = EncryptionKey::from_hex_string(hex_key).unwrap();
@@ -1050,6 +1061,7 @@ impl MvccTestDbNoConn {
             OpenFlags::default(),
             self.opts,
             self.enc_opts.clone(),
+            std::sync::Arc::new(crate::SqliteDialect),
         )?;
         self.db.replace(db);
         Ok(())
@@ -2059,7 +2071,8 @@ fn test_bootstrap_repairs_torn_short_log_before_metadata_init() {
 
     {
         let io = Arc::new(PlatformIO::new().unwrap());
-        let db = Database::open_file(io, &db_path_str).unwrap();
+        let db = Database::open_file(io, &db_path_str, std::sync::Arc::new(crate::SqliteDialect))
+            .unwrap();
         let conn = db.connect().unwrap();
         conn.execute("CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)")
             .unwrap();
@@ -2075,7 +2088,8 @@ fn test_bootstrap_repairs_torn_short_log_before_metadata_init() {
     }
     {
         let io = Arc::new(PlatformIO::new().unwrap());
-        let db = Database::open_file(io, &db_path_str).unwrap();
+        let db = Database::open_file(io, &db_path_str, std::sync::Arc::new(crate::SqliteDialect))
+            .unwrap();
         let conn = db.connect().unwrap();
         conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
         conn.close().unwrap();
@@ -2086,7 +2100,8 @@ fn test_bootstrap_repairs_torn_short_log_before_metadata_init() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    let db = Database::open_file(io, &db_path_str).unwrap();
+    let db =
+        Database::open_file(io, &db_path_str, std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
     let meta = get_rows(
         &conn,
@@ -2386,6 +2401,7 @@ fn test_bootstrap_recovers_committed_wal_without_log_file() {
         OpenFlags::default(),
         DatabaseOpts::new().with_experimental_mvcc_passive_checkpoint(true),
         None,
+        std::sync::Arc::new(crate::SqliteDialect),
     )
     .expect("open should recover, not fail closed");
     let conn = db
@@ -2419,7 +2435,8 @@ fn test_full_checkpoint_reopen_recovers_truncate_mode() {
     }
 
     let io = Arc::new(PlatformIO::new().unwrap());
-    let db = Database::open_file(io, &db_path).expect("FULL checkpoint reopen should recover");
+    let db = Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect))
+        .expect("FULL checkpoint reopen should recover");
     let conn = db
         .connect()
         .expect("connect should recover after FULL checkpoint");
@@ -2521,7 +2538,7 @@ fn test_bootstrap_rejects_torn_log_header_with_committed_wal() {
     }
 
     let io = Arc::new(PlatformIO::new().unwrap());
-    match Database::open_file(io, &db_path) {
+    match Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect)) {
         Ok(db) => match db.connect() {
             Ok(_) => panic!("expected connect to fail with Corrupt"),
             Err(err) => assert!(matches!(err, LimboError::Corrupt(_))),
@@ -2562,7 +2579,7 @@ fn test_bootstrap_rejects_corrupt_log_header_without_wal() {
     }
 
     let io = Arc::new(PlatformIO::new().unwrap());
-    match Database::open_file(io, &db_path) {
+    match Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect)) {
         Ok(db) => match db.connect() {
             Ok(_) => panic!("expected connect to fail with Corrupt"),
             Err(err) => assert!(matches!(err, LimboError::Corrupt(_))),
@@ -2632,7 +2649,8 @@ fn test_bootstrap_ignores_wal_frames_without_commit_marker() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    let db2 = Database::open_file(io, &db_path).expect("open should succeed");
+    let db2 = Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect))
+        .expect("open should succeed");
     let conn2 = db2.connect().expect("connect should succeed");
     let rows = get_rows(&conn2, "SELECT id, v FROM t ORDER BY id");
     assert_eq!(rows.len(), 1);
@@ -2897,7 +2915,7 @@ fn test_meta_recovery_case_3_no_wal_log_frames_without_valid_metadata_fails_clos
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    match Database::open_file(io, &db_path) {
+    match Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect)) {
         Ok(db2) => match db2.connect() {
             Ok(_) => panic!("expected connect to fail with Corrupt"),
             Err(err) => assert!(
@@ -2982,7 +3000,7 @@ fn test_meta_recovery_case_5_committed_wal_missing_metadata_fails_closed() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    match Database::open_file(io, &db_path) {
+    match Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect)) {
         Ok(db2) => match db2.connect() {
             Ok(_) => panic!("expected connect to fail closed"),
             Err(err) => assert!(matches!(err, LimboError::Corrupt(_))),
@@ -3021,7 +3039,9 @@ fn test_meta_recovery_case_6_committed_wal_corrupt_metadata_fails_closed() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    if Database::open_file(io, &db_path).is_ok_and(|db2| db2.connect().is_ok()) {
+    if Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect))
+        .is_ok_and(|db2| db2.connect().is_ok())
+    {
         panic!("expected connect to fail closed")
     }
 }
@@ -3052,7 +3072,9 @@ fn test_meta_recovery_case_7_metadata_table_shape_violation_fails_closed() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    if Database::open_file(io, &db_path).is_ok_and(|db2| db2.connect().is_ok()) {
+    if Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect))
+        .is_ok_and(|db2| db2.connect().is_ok())
+    {
         panic!("expected connect to fail closed")
     }
 }
@@ -3087,7 +3109,7 @@ fn test_meta_recovery_case_9_metadata_row_deleted_fails_closed() {
         manager.clear();
     }
     let io = Arc::new(PlatformIO::new().unwrap());
-    match Database::open_file(io, &db_path) {
+    match Database::open_file(io, &db_path, std::sync::Arc::new(crate::SqliteDialect)) {
         Ok(db2) => match db2.connect() {
             Ok(_) => panic!("expected connect to fail closed"),
             Err(err) => assert!(matches!(err, LimboError::Corrupt(_))),
@@ -9083,7 +9105,8 @@ fn test_integrity_check_after_drop_index_before_checkpoint() {
 fn test_interrupted_drop_table_rolls_back_schema_table_and_indexes() {
     let io = Arc::new(MemoryIO::new());
     let path = ":memory:interrupted-drop-table-schema-rollback";
-    let db = Database::open_file(io.clone(), path).unwrap();
+    let db =
+        Database::open_file(io.clone(), path, std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
 
     conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
@@ -9129,7 +9152,7 @@ fn test_interrupted_drop_table_rolls_back_schema_table_and_indexes() {
 
     // Reopening used to fail here because the same-connection SELECT could
     // commit the interrupted DROP TABLE's partial sqlite_schema delete.
-    let db = Database::open_file(io, path).unwrap();
+    let db = Database::open_file(io, path, std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
     let target_schema_rows = get_rows(
         &conn,
@@ -12208,6 +12231,7 @@ fn test_abandoned_journal_mode_mvcc_bootstrap_restores_connection() {
         OpenFlags::default(),
         DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(crate::SqliteDialect),
     )
     .unwrap();
     let conn = db.connect().unwrap();
@@ -13345,7 +13369,8 @@ fn test_abandoned_drop() {
     let _ = tracing_subscriber::fmt::try_init();
     let io = Arc::new(MemoryIO::new());
     let path = ":memory:";
-    let db = Database::open_file(io.clone(), path).unwrap();
+    let db =
+        Database::open_file(io.clone(), path, std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
 
     conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
@@ -13379,7 +13404,7 @@ fn test_abandoned_drop() {
     drop(conn);
     drop(db);
 
-    let db = Database::open_file(io, path).expect(
+    let db = Database::open_file(io, path, std::sync::Arc::new(crate::SqliteDialect)).expect(
         "reopen should not fail; abandoned DROP must not have committed its partial Delete",
     );
     let conn = db.connect().unwrap();
@@ -13735,6 +13760,7 @@ fn test_autoincrement_insert_works_for_preexisting_table() {
             OpenFlags::default(),
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -13759,6 +13785,7 @@ fn test_autoincrement_insert_works_for_preexisting_table() {
             OpenFlags::default(),
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -14527,6 +14554,7 @@ fn test_mvcc_late_encryption_setup_keeps_metadata_bootstrapped() {
         OpenFlags::default(),
         opts,
         None,
+        std::sync::Arc::new(crate::SqliteDialect),
     )
     .unwrap();
     let conn = db.connect().unwrap();
@@ -15019,7 +15047,8 @@ fn test_mvcc_portable_changes_encoder_matches_metadata_wire_golden() {
 #[test]
 fn test_mvcc_portable_changes_disabled_by_default() {
     let io = Arc::new(MemoryIO::new());
-    let db = Database::open_file(io, ":memory:").unwrap();
+    let db =
+        Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
     conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
     conn.execute("CREATE TABLE items(id INTEGER PRIMARY KEY, portable_changes TEXT)")
@@ -15157,7 +15186,8 @@ fn test_mvcc_portable_changes_resolve_rows_through_object_map_in_same_txn() {
 #[test]
 fn test_mvcc_mode_supports_cdc_for_client_push() {
     let io = Arc::new(MemoryIO::new());
-    let db = Database::open_file(io, ":memory:").unwrap();
+    let db =
+        Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
     conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
     conn.execute("PRAGMA capture_data_changes_conn('full,turso_cdc')")
@@ -15348,7 +15378,8 @@ fn test_mvcc_portable_changes_use_checkpointed_schema_after_restart() {
 #[test]
 fn test_mvcc_portable_changes_resolve_user_table_after_cross_connection_checkpoint() {
     let io = Arc::new(MemoryIO::new());
-    let db = Database::open_file(io, ":memory:").unwrap();
+    let db =
+        Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let creator = db.connect().unwrap();
     creator.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
     creator.set_portable_logical_changes_enabled(true);
@@ -15549,7 +15580,8 @@ fn test_mvcc_portable_changes_do_not_infer_origin_from_application_table() {
 #[test]
 fn test_mvcc_portable_changes_metadata_does_not_auto_enable_or_get_consumed() {
     let io = Arc::new(MemoryIO::new());
-    let db = Database::open_file(io, ":memory:").unwrap();
+    let db =
+        Database::open_file(io, ":memory:", std::sync::Arc::new(crate::SqliteDialect)).unwrap();
     let conn = db.connect().unwrap();
     conn.execute("PRAGMA journal_mode = 'mvcc'").unwrap();
     conn.set_mvcc_log_meta("client".to_string(), Some("client-a".to_string()));
@@ -17784,6 +17816,7 @@ fn busy_from_log_tx_strands_pager_commit_lock_then_blocks_subsequent_commit() {
             OpenFlags::default(),
             DatabaseOpts::new(),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -17811,6 +17844,7 @@ fn busy_from_log_tx_strands_pager_commit_lock_then_blocks_subsequent_commit() {
         DatabaseOpts::new(),
         None,
         Some(busy_storage.clone() as Arc<dyn DurableStorage>),
+        std::sync::Arc::new(crate::SqliteDialect),
     )
     .unwrap();
 

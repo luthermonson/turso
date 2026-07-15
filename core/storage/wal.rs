@@ -5874,6 +5874,7 @@ pub mod test {
             crate::OpenFlags::default(),
             crate::DatabaseOpts::new().with_multiprocess_wal(true),
             None,
+            std::sync::Arc::new(crate::SqliteDialect),
         )
         .unwrap();
         // db + tmp directory

@@ -26,6 +26,7 @@ fn test_database_rename_registry_stale() {
         OpenFlags::Create,
         turso_core::DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
 
@@ -57,6 +58,7 @@ fn test_database_rename_registry_stale() {
         OpenFlags::Create,
         turso_core::DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
 
@@ -148,6 +150,7 @@ fn test_sdk_close_finalizes_leaked_statements() {
         OpenFlags::Create,
         turso_core::DatabaseOpts::new(),
         None,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )
     .unwrap();
 

@@ -60,6 +60,7 @@ fn run_non_4k_page_size_encryption_test(
         let (_io, conn) = turso_core::Connection::from_uri(
             &uri,
             DatabaseOpts::new().with_encryption(ENABLE_ENCRYPTION),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         run_query_on_row(tmp_db, &conn, "SELECT * FROM test", |row: &Row| {
             assert_eq!(row.get::<i64>(0).unwrap(), 1);
@@ -139,6 +140,7 @@ fn run_corruption_associated_data_bytes_test(
         let (_io, conn) = turso_core::Connection::from_uri(
             &uri,
             DatabaseOpts::new().with_encryption(ENABLE_ENCRYPTION),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )
         .expect("opening the corrupted DB should not fail at the URI level");
 
@@ -194,7 +196,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
             "file:{}?cipher=aegis256&hexkey=b1bbfda4f589dc9daaf004fe21111e00dc00c98237102f5c7002a5669fc76327",
             db_path.to_str().unwrap()
         );
-        let (_io, conn) = turso_core::Connection::from_uri(&uri, opts)?;
+        let (_io, conn) = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         let mut row_count = 0;
         run_query_on_row(&tmp_db, &conn, "SELECT * FROM test", |row: &Row| {
             assert_eq!(row.get::<i64>(0).unwrap(), 1);
@@ -209,7 +215,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
             "file:{}?cipher=aegis256&hexkey=b1bbfda4f589dc9daaf004fe21111e00dc00c98237102f5c7002a5669fc76327",
             db_path.to_str().unwrap()
         );
-        let (_io, conn) = turso_core::Connection::from_uri(&uri, opts)?;
+        let (_io, conn) = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         run_query(
             &tmp_db,
             &conn,
@@ -223,7 +233,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
             "file:{}?cipher=aegis256&hexkey=b1bbfda4f589dc9daaf004fe21111e00dc00c98237102f5c7002a5669fc76327",
             db_path.to_str().unwrap()
         );
-        let (_io, conn) = turso_core::Connection::from_uri(&uri, opts)?;
+        let (_io, conn) = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         run_query(
             &tmp_db,
             &conn,
@@ -245,7 +259,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
             "file:{}?cipher=aegis256&hexkey=b1bbfda4f589dc9daaf004fe21111e00dc00c98237102f5c7002a5669fc76377",
             db_path.to_str().unwrap()
         );
-        let (_io, conn) = turso_core::Connection::from_uri(&uri, opts)?;
+        let (_io, conn) = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         let result = run_query_on_row(&tmp_db, &conn, "SELECT * FROM test", |_row: &Row| {});
         assert!(
             result.is_err(),
@@ -255,7 +273,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
     {
         // test connecting to encrypted db using insufficient encryption parameters in URI.
         let uri = format!("file:{}?cipher=aegis256", db_path.to_str().unwrap());
-        let result = turso_core::Connection::from_uri(&uri, opts);
+        let result = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        );
         assert!(
             result.is_err(),
             "should return error when accessing encrypted DB without passing hexkey in URI"
@@ -266,7 +288,11 @@ fn test_per_page_encryption(tmp_db: TempDatabase) -> anyhow::Result<()> {
             "file:{}?hexkey=b1bbfda4f589dc9daaf004fe21111e00dc00c98237102f5c7002a5669fc76327",
             db_path.to_str().unwrap()
         );
-        let result = turso_core::Connection::from_uri(&uri, opts);
+        let result = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        );
         assert!(
             result.is_err(),
             "should return error when accessing encrypted DB without passing cipher in URI"
@@ -412,7 +438,11 @@ fn test_corruption_turso_magic_bytes(tmp_db: TempDatabase) -> anyhow::Result<()>
             db_path.to_str().unwrap()
         );
 
-        let (_io, conn) = turso_core::Connection::from_uri(&uri, opts)?;
+        let (_io, conn) = turso_core::Connection::from_uri(
+            &uri,
+            opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
+        )?;
         let result = run_query_on_row(&tmp_db, &conn, "SELECT * FROM test", |_row: &Row| {});
 
         assert!(
@@ -586,6 +616,7 @@ fn test_encryption_key_validation_with_cached_database(_db: TempDatabase) -> any
         OpenFlags::Create,
         opts,
         correct_encryption_opts.clone(),
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
 
     // step 1: Create encrypted database with correct key
@@ -616,6 +647,7 @@ fn test_encryption_key_validation_with_cached_database(_db: TempDatabase) -> any
             OpenFlags::default(),
             opts,
             correct_encryption_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
 
         let conn = db.connect()?;
@@ -656,6 +688,7 @@ fn test_encryption_key_validation_with_cached_database(_db: TempDatabase) -> any
                 cipher: "aegis256".to_string(),
                 hexkey: wrong_key.to_string(),
             }),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
 
         // opening succeeds - the key is not validated at open time
@@ -693,6 +726,7 @@ fn test_encryption_key_validation_with_cached_database(_db: TempDatabase) -> any
             OpenFlags::default(),
             opts,
             None,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         );
 
         assert!(
@@ -718,6 +752,7 @@ fn test_encryption_key_validation_with_cached_database(_db: TempDatabase) -> any
             OpenFlags::default(),
             opts,
             correct_encryption_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
 
         let conn = db.connect()?;
@@ -783,6 +818,7 @@ fn create_encrypted_db(
         OpenFlags::Create,
         opts,
         encryption_opts,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     )?;
 
     let conn = db.connect()?;
@@ -1191,6 +1227,7 @@ fn test_encrypted_db_then_enable_mvcc_large_payload_chunked() -> anyhow::Result<
             OpenFlags::Create,
             opts,
             enc_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let key = EncryptionKey::from_hex_string(hex_key)?;
         let conn = db.connect_with_encryption(Some(key))?;
@@ -1216,6 +1253,7 @@ fn test_encrypted_db_then_enable_mvcc_large_payload_chunked() -> anyhow::Result<
             OpenFlags::default(),
             opts,
             enc_opts,
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let key = EncryptionKey::from_hex_string(hex_key)?;
         let conn = db.connect_with_encryption(Some(key))?;
@@ -1264,6 +1302,7 @@ fn test_encrypted_db_with_data_then_enable_mvcc() -> anyhow::Result<()> {
             OpenFlags::Create,
             opts,
             enc_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let key = EncryptionKey::from_hex_string(hex_key)?;
         let conn = db.connect_with_encryption(Some(key))?;
@@ -1282,6 +1321,7 @@ fn test_encrypted_db_with_data_then_enable_mvcc() -> anyhow::Result<()> {
             OpenFlags::default(),
             opts,
             enc_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let key = EncryptionKey::from_hex_string(hex_key)?;
         let conn = db.connect_with_encryption(Some(key))?;
@@ -1324,6 +1364,7 @@ fn test_encrypted_db_with_data_then_enable_mvcc() -> anyhow::Result<()> {
             OpenFlags::default(),
             opts,
             enc_opts.clone(),
+            std::sync::Arc::new(turso_core::SqliteDialect),
         )?;
         let key = EncryptionKey::from_hex_string(hex_key)?;
         let conn = db.connect_with_encryption(Some(key))?;

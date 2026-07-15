@@ -78,7 +78,11 @@ pub extern "system" fn Java_tech_turso_core_TursoDB_openUtf8<'local>(
         }
     };
 
-    let db = match Database::open_file(io.clone(), &path) {
+    let db = match Database::open_file(
+        io.clone(),
+        &path,
+        std::sync::Arc::new(turso_core::SqliteDialect),
+    ) {
         Ok(db) => db,
         Err(e) => {
             set_err_msg_and_throw_exception(&mut env, obj, TURSO_ETC, e.to_string());
@@ -167,6 +171,7 @@ pub extern "system" fn Java_tech_turso_core_TursoDB_openWithEncryptionUtf8<'loca
         OpenFlags::Create,
         db_opts,
         encryption_opts,
+        std::sync::Arc::new(turso_core::SqliteDialect),
     ) {
         Ok(db) => db,
         Err(e) => {

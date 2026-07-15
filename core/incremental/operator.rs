@@ -278,7 +278,12 @@ mod tests {
     /// Create a test pager for operator tests with both table and index
     fn create_test_pager() -> (crate::sync::Arc<crate::Pager>, i64, i64) {
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
-        let db = Database::open_file(io.clone(), ":memory:").unwrap();
+        let db = Database::open_file(
+            io.clone(),
+            ":memory:",
+            std::sync::Arc::new(crate::SqliteDialect),
+        )
+        .unwrap();
         let conn = db.connect().unwrap();
 
         let pager = conn.pager.load().clone();
