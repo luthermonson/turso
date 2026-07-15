@@ -1,28 +1,21 @@
-//! Schema dialects.
+//! SQL dialects.
 //!
 //! The [`Dialect`] trait is the boundary between the engine and a
-//! frontend's SQL surface. The engine owns schema *mechanics* (root pages,
-//! B-trees, the `sqlite_schema` table itself) and goes through the dialect
-//! for schema *text*: whenever it parses a `sqlite_schema` table row back
-//! into a table definition, the dialect decides how that stored SQL is
-//! interpreted. The [`sqlite`] module owns the default dialect and the
-//! catalog tables that ship with every Turso build (`pragma_*`,
-//! `json_each`/`json_tree`, `sqlite_dbpage`, `btree_dump`,
-//! `sqlite_turso_types`).
+//! frontend's SQL surface. It parses frontend SQL into the engine AST,
+//! interprets persisted schema text, and leaves schema mechanics such as root
+//! pages, B-trees, and `sqlite_schema` itself to the engine.
 
 pub mod sqlite;
 
 pub use sqlite::SqliteDialect;
 
-/// Schema dialect layered on top of the engine.
+/// SQL dialect layered on top of the engine.
 ///
 /// Every [`crate::Database`] carries a dialect, supplied explicitly by
 /// every open path and fixed for the lifetime of the database;
-/// SQLite-compatible callers pass [`SqliteDialect`]. The engine
-/// consults it on every
-/// schema load — database open, connection schema reparse, the
-/// `ParseSchema` opcode after DDL, and MVCC schema rebuild — so a frontend
-/// can store its own schema SQL in `sqlite_schema` and reparse it here.
+/// SQLite-compatible callers pass [`SqliteDialect`]. Initial statement
+/// preparation, re-preparation, and every schema load go through this
+/// interface.
 pub trait Dialect: Send + Sync + 'static {
     /// Stable identifier for this dialect (e.g. "sqlite", "postgres").
     ///
@@ -30,6 +23,16 @@ pub trait Dialect: Send + Sync + 'static {
     /// created with; the process-wide database registry uses this name to
     /// reject an open whose dialect differs from the already-open instance.
     fn name(&self) -> &'static str;
+
+    /// Parse the first statement in `sql` into the engine AST.
+    ///
+    /// Returns the parsed command, if any, and the number of input bytes
+    /// consumed. The engine uses the same method for initial preparation and
+    /// re-preparation, so dialect-specific SQL remains valid after schema or
+    /// connection compilation state changes. Implementations must accept the
+    /// canonical SQLite text produced by the engine AST formatter because
+    /// engine-generated and AST-only statements use that representation.
+    fn parse(&self, sql: &str) -> crate::Result<(Option<turso_parser::ast::Cmd>, usize)>;
 
     /// Parse a `sqlite_schema` `type='table'` row's SQL into a table
     /// definition.
@@ -61,11 +64,22 @@ mod tests {
     #[derive(Default)]
     struct TestDialect {
         parse_calls: AtomicUsize,
+        statement_parse_calls: AtomicUsize,
     }
 
     impl Dialect for TestDialect {
         fn name(&self) -> &'static str {
             "test"
+        }
+
+        fn parse(&self, sql: &str) -> crate::Result<(Option<turso_parser::ast::Cmd>, usize)> {
+            self.statement_parse_calls.fetch_add(1, Ordering::SeqCst);
+            if let Some(sql) = sql.strip_prefix("test: ") {
+                let (cmd, offset) = sqlite::parse(sql)?;
+                Ok((cmd, "test: ".len() + offset))
+            } else {
+                sqlite::parse(sql)
+            }
         }
 
         fn parse_table_sql(&self, sql: &str, root_page: i64) -> crate::Result<BTreeTable> {
@@ -121,6 +135,59 @@ mod tests {
         // Both tables are usable under the dialect.
         conn.execute("INSERT INTO t VALUES (1)").unwrap();
         conn.execute("INSERT INTO u VALUES (2)").unwrap();
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn dialect_parser_is_used_for_reprepare() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let dialect = Arc::new(TestDialect::default());
+        let db = open_db(&io, "dialect-reprepare.db", dialect.clone()).unwrap();
+        let conn = db.connect().unwrap();
+
+        let mut stmt = conn.prepare("test: SELECT 42").unwrap();
+        conn.set_full_column_names(true);
+        let rows = stmt.run_collect_rows().unwrap();
+
+        assert_eq!(rows, vec![vec![crate::Value::from_i64(42)]]);
+        assert_eq!(
+            stmt.stmt_status(crate::StatementStatusCounter::Reprepare),
+            1
+        );
+        assert_eq!(dialect.statement_parse_calls.load(Ordering::SeqCst), 2);
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn query_runner_reports_invalid_utf8_once() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let db = open_db(&io, "query-runner-invalid-utf8.db", Arc::new(SqliteDialect)).unwrap();
+        let conn = db.connect().unwrap();
+        let mut runner = conn.query_runner(b"SELECT 1;\xff");
+
+        let Some(Err(crate::LimboError::ParseError(message))) = runner.next() else {
+            panic!("invalid UTF-8 must produce a parse error");
+        };
+        assert!(message.contains("invalid UTF-8"));
+        assert!(runner.next().is_none());
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn ast_only_create_table_uses_canonical_sql() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        let db = open_db(&io, "dialect-ast.db", Arc::new(TestDialect::default())).unwrap();
+        let conn = db.connect().unwrap();
+        let (Some(turso_parser::ast::Cmd::Stmt(stmt)), _) =
+            sqlite::parse("CREATE TABLE t (x INTEGER)").unwrap()
+        else {
+            panic!("expected CREATE TABLE statement");
+        };
+
+        let mut stmt = conn.prepare_stmt(stmt).unwrap();
+        assert_ne!(stmt.get_sql(), "<ast>");
+        stmt.run_ignore_rows().unwrap();
+        conn.execute("INSERT INTO t VALUES (1)").unwrap();
         conn.close().unwrap();
     }
 

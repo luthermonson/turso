@@ -27,8 +27,8 @@ use crate::{
     BusyHandlerCallback, CaptureDataChangesInfo, CheckpointMode, CheckpointResult, CipherMode, Cmd,
     Completion, ConnectionMetrics, Database, DatabaseCatalog, DatabaseOpts, Duration,
     EncryptionKey, EncryptionOpts, IOResult, IndexMethod, LimboError, MvStore, OpenFlags, PageSize,
-    Pager, Parser, Program, QueryMode, QueryRunner, Result, Schema, Statement, SyncMode,
-    TransactionMode, Trigger, Value, VirtualTable, WalAutoActions,
+    Pager, Program, QueryMode, QueryRunner, Result, Schema, Statement, SyncMode, TransactionMode,
+    Trigger, Value, VirtualTable, WalAutoActions,
 };
 use crate::{is_memory_like, turso_assert};
 use crate::{MAIN_DB_ID, TEMP_DB_ID};
@@ -914,8 +914,8 @@ impl Connection {
                 drop(syms);
                 let cmd = {
                     crate::stack::trace_stack!("schema_retry_parse");
-                    let mut parser = Parser::new(input.as_bytes());
-                    let Some(cmd) = parser.next_cmd()? else {
+                    let (cmd, _) = self.parse_sql(input)?;
+                    let Some(cmd) = cmd else {
                         return Err(err);
                     };
                     cmd
@@ -1024,6 +1024,7 @@ impl Connection {
         stmt: ast::Stmt,
         origin: StatementOrigin,
     ) -> Result<Statement> {
+        let input = stmt.to_string();
         if self.is_closed() {
             return Err(LimboError::InternalError("Connection closed".to_string()));
         }
@@ -1044,7 +1045,7 @@ impl Connection {
                 self.clone(),
                 &syms,
                 mode,
-                "<ast>", // No SQL input string available
+                &input,
             )?;
             Ok(Statement::new_with_origin(
                 program,
@@ -1686,10 +1687,9 @@ impl Connection {
             return Err(LimboError::InternalError("Connection closed".to_string()));
         }
         let sql = sql.as_ref();
-        let mut parser = Parser::new(sql.as_bytes());
-        while let Some(cmd) = parser.next_cmd()? {
-            let byte_offset_end = parser.offset();
-            let input = str::from_utf8(&sql.as_bytes()[..byte_offset_end])
+        let mut remaining = sql;
+        while let (Some(cmd), byte_offset_end) = self.parse_sql(remaining)? {
+            let input = str::from_utf8(&remaining.as_bytes()[..byte_offset_end])
                 .unwrap()
                 .trim();
             let (program, pager, mode) = self.compile_cmd(cmd, input)?;
@@ -1697,6 +1697,7 @@ impl Connection {
                 crate::stack::trace_stack!("run");
                 Statement::new(program, pager.clone(), mode, 0).run_ignore_rows()?;
             }
+            remaining = &remaining[byte_offset_end..];
         }
         Ok(())
     }
@@ -1718,11 +1719,8 @@ impl Connection {
         Ok(Some((stmt, byte_offset_end)))
     }
 
-    fn parse_sql(&self, sql: &str) -> Result<(Option<Cmd>, usize)> {
-        let mut parser = Parser::new(sql.as_bytes());
-        let cmd = parser.next_cmd()?;
-        let offset = parser.offset();
-        Ok((cmd, offset))
+    pub(crate) fn parse_sql(&self, sql: &str) -> Result<(Option<Cmd>, usize)> {
+        self.db.dialect().parse(sql)
     }
 
     #[cfg(feature = "fs")]

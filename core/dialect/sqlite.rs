@@ -1,4 +1,4 @@
-//! The SQLite schema dialect and built-in SQLite-style catalog tables.
+//! The SQLite dialect and built-in SQLite-style catalog tables.
 //!
 //! [`SqliteDialect`] is the default [`super::Dialect`]: schema
 //! rows are plain SQLite text parsed with the SQLite parser. The catalog
@@ -13,8 +13,7 @@ use crate::sync::Arc;
 use crate::vtab::{VirtualTable, VirtualTableType};
 use turso_ext::VTabKind;
 
-/// The default schema dialect: `sqlite_schema` rows are canonical SQLite
-/// text.
+/// The default SQL dialect.
 pub struct SqliteDialect;
 
 impl super::Dialect for SqliteDialect {
@@ -22,9 +21,20 @@ impl super::Dialect for SqliteDialect {
         "sqlite"
     }
 
+    fn parse(&self, sql: &str) -> crate::Result<(Option<turso_parser::ast::Cmd>, usize)> {
+        parse(sql)
+    }
+
     fn parse_table_sql(&self, sql: &str, root_page: i64) -> crate::Result<BTreeTable> {
         BTreeTable::from_sql(sql, root_page)
     }
+}
+
+/// Parse the first SQLite statement in `sql` and return its consumed byte count.
+pub fn parse(sql: &str) -> crate::Result<(Option<turso_parser::ast::Cmd>, usize)> {
+    let mut parser = turso_parser::parser::Parser::new(sql.as_bytes());
+    let cmd = parser.next_cmd()?;
+    Ok((cmd, parser.offset()))
 }
 
 /// Insert the standard SQLite-style catalog tables into `schema`.
