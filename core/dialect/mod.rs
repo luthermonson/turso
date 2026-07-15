@@ -286,7 +286,7 @@ mod tests {
     fn open_db(
         io: &Arc<dyn IO>,
         path: &str,
-        dialect: Option<Arc<dyn SchemaDialect>>,
+        dialect: Arc<dyn SchemaDialect>,
     ) -> crate::Result<Arc<Database>> {
         let file = io.open_file(path, OpenFlags::Create, true)?;
         let db_file = Arc::new(DatabaseFile::new(file));
@@ -307,7 +307,7 @@ mod tests {
     fn schema_load_routes_through_dialect() {
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
         {
-            let db = open_db(&io, "dialect-load.db", None).unwrap();
+            let db = open_db(&io, "dialect-load.db", Arc::new(SqliteSchemaDialect)).unwrap();
             let conn = db.connect().unwrap();
             conn.execute("CREATE TABLE t (x INTEGER)").unwrap();
             conn.close().unwrap();
@@ -316,7 +316,7 @@ mod tests {
         // Reopening the database parses the stored schema row for `t`
         // through the dialect.
         let dialect = Arc::new(TestSchemaDialect::default());
-        let db = open_db(&io, "dialect-load.db", Some(dialect.clone())).unwrap();
+        let db = open_db(&io, "dialect-load.db", dialect.clone()).unwrap();
         assert!(dialect.parse_calls.load(Ordering::SeqCst) >= 1);
 
         // DDL reparses the schema via the ParseSchema opcode, again through
@@ -338,7 +338,7 @@ mod tests {
         let db = open_db(
             &io,
             "dialect-catalog.db",
-            Some(Arc::new(TestSchemaDialect::default())),
+            Arc::new(TestSchemaDialect::default()),
         )
         .unwrap();
 
@@ -384,7 +384,7 @@ mod tests {
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
         {
             let dialect = Arc::new(TestSchemaDialect::default());
-            let db = open_db(&io, "dialect-store.db", Some(dialect)).unwrap();
+            let db = open_db(&io, "dialect-store.db", dialect).unwrap();
             let conn = db.connect().unwrap();
 
             // A frontend prepares its translated AST while supplying the
@@ -419,7 +419,7 @@ mod tests {
         // Round-trip: reopening parses the marked row back through the
         // dialect and the table stays usable.
         let dialect = Arc::new(TestSchemaDialect::default());
-        let db = open_db(&io, "dialect-store.db", Some(dialect.clone())).unwrap();
+        let db = open_db(&io, "dialect-store.db", dialect.clone()).unwrap();
         assert!(dialect.parse_calls.load(Ordering::SeqCst) >= 1);
         let conn = db.connect().unwrap();
         conn.execute("INSERT INTO t VALUES (1)").unwrap();
@@ -481,7 +481,7 @@ mod tests {
         let db = open_db(
             &io,
             "dialect-funcs.db",
-            Some(Arc::new(TestSchemaDialect::default())),
+            Arc::new(TestSchemaDialect::default()),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -522,12 +522,7 @@ mod tests {
     #[test]
     fn dialect_owns_the_function_surface() {
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
-        let db = open_db(
-            &io,
-            "dialect-nofuncs.db",
-            Some(Arc::new(NoFunctionsDialect)),
-        )
-        .unwrap();
+        let db = open_db(&io, "dialect-nofuncs.db", Arc::new(NoFunctionsDialect)).unwrap();
         let conn = db.connect().unwrap();
 
         // Function-free SQL works, including DDL (whose internal helper
@@ -550,7 +545,12 @@ mod tests {
 
         // The default dialect still gates custom types on the experimental
         // flag.
-        let db = open_db(&io, "dialect-types-default.db", None).unwrap();
+        let db = open_db(
+            &io,
+            "dialect-types-default.db",
+            Arc::new(SqliteSchemaDialect),
+        )
+        .unwrap();
         let conn = db.connect().unwrap();
         let err = conn
             .execute("CREATE TYPE mytype(value text) BASE text")
@@ -566,7 +566,7 @@ mod tests {
         let db = open_db(
             &io,
             "dialect-types-required.db",
-            Some(Arc::new(TestSchemaDialect::default())),
+            Arc::new(TestSchemaDialect::default()),
         )
         .unwrap();
         let conn = db.connect().unwrap();
@@ -586,12 +586,12 @@ mod tests {
     #[test]
     fn registry_rejects_dialect_mismatch() {
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
-        let _db = open_db(&io, "dialect-mismatch.db", None).unwrap();
+        let _db = open_db(&io, "dialect-mismatch.db", Arc::new(SqliteSchemaDialect)).unwrap();
 
         let err = open_db(
             &io,
             "dialect-mismatch.db",
-            Some(Arc::new(TestSchemaDialect::default())),
+            Arc::new(TestSchemaDialect::default()),
         )
         .unwrap_err();
         assert!(
@@ -606,11 +606,16 @@ mod tests {
         let _db = open_db(
             &io,
             "dialect-mismatch-reverse.db",
-            Some(Arc::new(TestSchemaDialect::default())),
+            Arc::new(TestSchemaDialect::default()),
         )
         .unwrap();
 
-        let err = open_db(&io, "dialect-mismatch-reverse.db", None).unwrap_err();
+        let err = open_db(
+            &io,
+            "dialect-mismatch-reverse.db",
+            Arc::new(SqliteSchemaDialect),
+        )
+        .unwrap_err();
         assert!(
             err.to_string().contains("schema dialect"),
             "unexpected error: {err}"

@@ -106,7 +106,7 @@ fn database_open_with_allocator_uses_allocator_for_mvstore_skiplist() {
         None,
         None,
         alloc,
-        None,
+        StdArc::new(crate::SqliteSchemaDialect),
     )
     .unwrap();
     let conn = db.connect().unwrap();

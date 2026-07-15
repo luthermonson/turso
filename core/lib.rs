@@ -709,7 +709,7 @@ impl Database {
         db_file: Arc<dyn DatabaseStorage>,
         encryption_opts: Option<EncryptionOpts>,
         mv_store_allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<Self> {
         let path = path.into();
         let wal_path = wal_path.into();
@@ -740,8 +740,6 @@ impl Database {
             None
         };
 
-        let schema_dialect = schema_dialect
-            .unwrap_or_else(|| Arc::new(SqliteSchemaDialect) as Arc<dyn SchemaDialect>);
         let enable_custom_types =
             opts.enable_custom_types || schema_dialect.requires_custom_types();
 
@@ -949,8 +947,8 @@ impl Database {
     /// dialect is fixed at open time and shared by every user of the
     /// registered instance, so a mismatch is an error rather than a silent
     /// share.
-    fn check_registry_dialect(db: &Database, requested: Option<&dyn SchemaDialect>) -> Result<()> {
-        let requested_name = requested.map_or_else(|| SqliteSchemaDialect.name(), |d| d.name());
+    fn check_registry_dialect(db: &Database, requested: &dyn SchemaDialect) -> Result<()> {
+        let requested_name = requested.name();
         if db.schema_dialect.name() != requested_name {
             return Err(LimboError::InvalidArgument(format!(
                 "database is already open with schema dialect '{}'; requested '{}'",
@@ -997,7 +995,7 @@ impl Database {
 
         // The file-open entry points always request the default dialect;
         // reject the cached instance if it was opened with another one.
-        Self::check_registry_dialect(&db, None)?;
+        Self::check_registry_dialect(&db, &SqliteSchemaDialect)?;
 
         Ok(Some(db))
     }
@@ -1097,7 +1095,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
-            None,
+            Arc::new(SqliteSchemaDialect),
         )
     }
 
@@ -1111,7 +1109,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<Arc<Database>> {
         let mut state = OpenDbAsyncState::new();
         loop {
@@ -1169,7 +1167,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
-            None,
+            Arc::new(SqliteSchemaDialect),
         )
     }
 
@@ -1184,7 +1182,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<IOResult<Arc<Database>>> {
         let result = Self::open_with_flags_async_internal(
             state,
@@ -1219,7 +1217,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<IOResult<Arc<Database>>> {
         // turso-sync-engine creates 2 databases with different names in the same IO if MemoryIO is used
         // in this case we need to bypass registry (as this is MemoryIO DB) but also preserve original distinction in names (e.g. :memory:-draft and :memory:-synced)
@@ -1246,7 +1244,7 @@ impl Database {
                                         .to_string(),
                                 ));
                             }
-                            Self::check_registry_dialect(&db, schema_dialect.as_deref())?;
+                            Self::check_registry_dialect(&db, schema_dialect.as_ref())?;
                             return Ok(IOResult::Done(db));
                         }
                         // Weak ref expired — treat as absent, fall through to insert Opening.
@@ -1308,7 +1306,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<IOResult<Arc<Database>>> {
         let result = Self::open_with_flags_bypass_registry_async_internal(
             state,
@@ -1387,7 +1385,7 @@ impl Database {
             encryption_opts,
             durable_storage,
             alloc::DynAllocator::default(),
-            None,
+            Arc::new(SqliteSchemaDialect),
         );
         if result.is_err() {
             // schema_guard is set by the open_with_flags_bypass_registry_async_internal - so we release it in case of error
@@ -1409,7 +1407,7 @@ impl Database {
         encryption_opts: Option<EncryptionOpts>,
         durable_storage: Option<Arc<dyn crate::mvcc::persistent_storage::DurableStorage>>,
         allocator: alloc::DynAllocator,
-        schema_dialect: Option<Arc<dyn SchemaDialect>>,
+        schema_dialect: Arc<dyn SchemaDialect>,
     ) -> Result<IOResult<Arc<Database>>> {
         loop {
             tracing::debug!(
