@@ -84,6 +84,7 @@ mod uuid;
 mod vdbe;
 mod vtab;
 
+pub use function::Func;
 #[cfg(any(feature = "fuzz", feature = "bench"))]
 pub use function::MathFunc;
 
