@@ -107,6 +107,14 @@ pub trait SchemaDialect: Send + Sync + 'static {
             "no such function: {name}"
         )))
     }
+
+    /// Whether this dialect needs the custom-type machinery (DECODE/ENCODE,
+    /// affinity metadata) regardless of the experimental database flag.
+    /// A dialect whose type system leans on custom types (e.g. PostgreSQL)
+    /// returns true so its databases never open with the machinery off.
+    fn requires_custom_types(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -175,6 +183,10 @@ mod tests {
             Ok(crate::Value::Numeric(crate::numeric::Numeric::Integer(
                 v + 1,
             )))
+        }
+
+        fn requires_custom_types(&self) -> bool {
+            true
         }
 
         fn register_catalog(
@@ -529,6 +541,45 @@ mod tests {
             err.to_string().contains("no such function"),
             "unexpected error: {err}"
         );
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn dialect_can_require_custom_types() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+
+        // The default dialect still gates custom types on the experimental
+        // flag.
+        let db = open_db(&io, "dialect-types-default.db", None).unwrap();
+        let conn = db.connect().unwrap();
+        let err = conn
+            .execute("CREATE TYPE mytype(value text) BASE text")
+            .unwrap_err();
+        assert!(
+            err.to_string().to_lowercase().contains("type"),
+            "unexpected error: {err}"
+        );
+        conn.close().unwrap();
+
+        // A dialect that requires custom types gets the machinery without
+        // the flag.
+        let db = open_db(
+            &io,
+            "dialect-types-required.db",
+            Some(Arc::new(TestSchemaDialect::default())),
+        )
+        .unwrap();
+        let conn = db.connect().unwrap();
+        conn.execute("CREATE TYPE mytype(value text) BASE text")
+            .unwrap();
+        conn.execute("CREATE TABLE t (x mytype)").unwrap();
+        conn.execute("INSERT INTO t VALUES ('hello')").unwrap();
+        let rows = conn
+            .prepare("SELECT x FROM t")
+            .unwrap()
+            .run_collect_rows()
+            .unwrap();
+        assert_eq!(rows.len(), 1);
         conn.close().unwrap();
     }
 
