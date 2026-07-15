@@ -80,7 +80,7 @@ pub trait SchemaDialect: Send + Sync + 'static {
     /// resolves the built-in set, another dialect resolves its own —
     /// mapping names onto engine primitives where it wants them (usually
     /// by composing with [`sqlite::resolve_builtin_function`]) and onto
-    /// [`crate::function::Func::Dialect`] for functions it executes
+    /// [`crate::Func::Dialect`] for functions it executes
     /// itself via [`SchemaDialect::exec_scalar_function`]. Consulted
     /// before extension functions; engine-generated helper statements
     /// always resolve with SQLite semantics instead.
@@ -88,13 +88,13 @@ pub trait SchemaDialect: Send + Sync + 'static {
         &self,
         name: &str,
         arg_count: usize,
-    ) -> crate::Result<Option<crate::function::Func>>;
+    ) -> crate::Result<Option<crate::Func>>;
 
     /// Execute a dialect scalar function at runtime.
     ///
     /// Receives the connection — unlike extension functions — because
     /// catalog functions (e.g. `pg_get_tabledef`) need to inspect the
-    /// schema. Only reached through [`crate::function::Func::Dialect`],
+    /// schema. Only reached through [`crate::Func::Dialect`],
     /// so a dialect that never resolves to that variant can keep the
     /// default "no such function" error.
     fn exec_scalar_function(
