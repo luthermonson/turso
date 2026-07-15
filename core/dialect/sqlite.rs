@@ -28,6 +28,24 @@ impl super::Dialect for SqliteDialect {
     fn parse_table_sql(&self, sql: &str, root_page: i64) -> crate::Result<BTreeTable> {
         BTreeTable::from_sql(sql, root_page)
     }
+
+    fn format_table_sql(
+        &self,
+        _input: &str,
+        tbl_name: &turso_parser::ast::QualifiedName,
+        body: &turso_parser::ast::CreateTableBody,
+    ) -> crate::Result<String> {
+        match body {
+            turso_parser::ast::CreateTableBody::ColumnsAndConstraints { .. } => Ok(format!(
+                "CREATE TABLE {} {}",
+                tbl_name.name.as_ident(),
+                body
+            )),
+            turso_parser::ast::CreateTableBody::AsSelect(_) => {
+                crate::bail_parse_error!("CREATE TABLE AS SELECT is not supported")
+            }
+        }
+    }
 }
 
 /// Parse the first SQLite statement in `sql` and return its consumed byte count.

@@ -1018,6 +1018,21 @@ impl Connection {
         self.prepare_stmt_with_origin(stmt, StatementOrigin::Root)
     }
 
+    /// Prepare an already-translated statement while keeping the original
+    /// SQL text.
+    ///
+    /// A frontend that already has an engine AST can call this instead of
+    /// parsing through [`Dialect::parse`](crate::Dialect::parse), while the
+    /// original text remains available for schema storage, diagnostics, and
+    /// later re-preparation through the dialect.
+    pub fn prepare_translated_stmt(
+        self: &Arc<Connection>,
+        stmt: ast::Stmt,
+        input: &str,
+    ) -> Result<Statement> {
+        self.prepare_stmt_with_input_and_origin(stmt, input, StatementOrigin::Root)
+    }
+
     #[turso_macros::trace_stack]
     fn prepare_stmt_with_origin(
         self: &Arc<Connection>,
@@ -1025,6 +1040,16 @@ impl Connection {
         origin: StatementOrigin,
     ) -> Result<Statement> {
         let input = stmt.to_string();
+        self.prepare_stmt_with_input_and_origin(stmt, &input, origin)
+    }
+
+    #[turso_macros::trace_stack]
+    fn prepare_stmt_with_input_and_origin(
+        self: &Arc<Connection>,
+        stmt: ast::Stmt,
+        input: &str,
+        origin: StatementOrigin,
+    ) -> Result<Statement> {
         if self.is_closed() {
             return Err(LimboError::InternalError("Connection closed".to_string()));
         }
@@ -1045,7 +1070,7 @@ impl Connection {
                 self.clone(),
                 &syms,
                 mode,
-                &input,
+                input,
             )?;
             Ok(Statement::new_with_origin(
                 program,
