@@ -46,6 +46,14 @@ impl super::Dialect for SqliteDialect {
             }
         }
     }
+
+    fn register_catalog(
+        &self,
+        schema: &mut Schema,
+        enable_custom_types: bool,
+    ) -> crate::Result<()> {
+        register_builtin_catalog(schema, enable_custom_types)
+    }
 }
 
 /// Parse the first SQLite statement in `sql` and return its consumed byte count.

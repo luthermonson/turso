@@ -51,15 +51,34 @@ impl VirtualTable {
     {
         let name = table.name();
         let sql = table.sql();
-        let columns = Self::resolve_columns(sql)?;
-        Ok(Arc::new(VirtualTable {
+        Ok(Arc::new(Self::new_internal(
             name,
-            columns,
-            kind: VTabKind::TableValuedFunction,
-            vtab_type: VirtualTableType::Internal(Arc::new(RwLock::new(table))),
+            sql,
+            VTabKind::TableValuedFunction,
+            Arc::new(RwLock::new(table)),
+        )?))
+    }
+
+    /// Build a virtual table around an [`InternalVirtualTable`]
+    /// implementation. `sql` must be a `CREATE TABLE` statement; it is
+    /// parsed to derive the column metadata. Schema dialects use this to
+    /// construct catalog tables (e.g. a `pg_catalog` surface) with a
+    /// non-table-valued-function kind and install them through
+    /// [`crate::dialect::Dialect::register_catalog`].
+    pub fn new_internal(
+        name: String,
+        sql: String,
+        kind: VTabKind,
+        table: Arc<RwLock<dyn InternalVirtualTable>>,
+    ) -> crate::Result<Self> {
+        Ok(VirtualTable {
+            name,
+            columns: Self::resolve_columns(sql)?,
+            kind,
+            vtab_type: VirtualTableType::Internal(table),
             vtab_id: 0,
             innocuous: true,
-        }))
+        })
     }
 
     pub(crate) fn function(name: &str, syms: &SymbolTable) -> crate::Result<Arc<VirtualTable>> {
