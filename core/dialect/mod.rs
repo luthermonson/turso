@@ -41,6 +41,21 @@ pub trait SchemaDialect: Send + Sync + 'static {
         sql: &str,
         root_page: i64,
     ) -> crate::Result<crate::schema::BTreeTable>;
+
+    /// Produce the SQL text to store in `sqlite_schema` for a
+    /// `CREATE TABLE`.
+    ///
+    /// `input` is the original statement text as the user wrote it, in the
+    /// frontend's dialect; `tbl_name` and `body` are the translated AST.
+    /// The SQLite dialect formats canonical SQLite text from the AST; a
+    /// frontend dialect typically stores `input` with a marker it can
+    /// recognize in [`SchemaDialect::parse_table_sql`].
+    fn format_table_sql(
+        &self,
+        input: &str,
+        tbl_name: &turso_parser::ast::QualifiedName,
+        body: &turso_parser::ast::CreateTableBody,
+    ) -> crate::Result<String>;
 }
 
 #[cfg(test)]
@@ -70,6 +85,15 @@ mod tests {
             self.parse_calls.fetch_add(1, Ordering::SeqCst);
             let sql = sql.strip_prefix("/* test */ ").unwrap_or(sql);
             BTreeTable::from_sql(sql, root_page)
+        }
+
+        fn format_table_sql(
+            &self,
+            input: &str,
+            _tbl_name: &turso_parser::ast::QualifiedName,
+            _body: &turso_parser::ast::CreateTableBody,
+        ) -> crate::Result<String> {
+            Ok(format!("/* test */ {input}"))
         }
     }
 
@@ -119,6 +143,59 @@ mod tests {
         // Both tables are usable under the dialect.
         conn.execute("INSERT INTO t VALUES (1)").unwrap();
         conn.execute("INSERT INTO u VALUES (2)").unwrap();
+        conn.close().unwrap();
+    }
+
+    #[test]
+    fn create_table_stores_dialect_formatted_sql() {
+        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
+        {
+            let dialect = Arc::new(TestSchemaDialect::default());
+            let db = open_db(&io, "dialect-store.db", Some(dialect)).unwrap();
+            let conn = db.connect().unwrap();
+
+            // A frontend prepares its translated AST while supplying the
+            // original statement text.
+            let input = "CREATE TABLE t (x INTEGER)";
+            let stmt = match turso_parser::parser::Parser::new(input.as_bytes())
+                .next_cmd()
+                .unwrap()
+                .unwrap()
+            {
+                turso_parser::ast::Cmd::Stmt(stmt) => stmt,
+                other => panic!("unexpected command: {other:?}"),
+            };
+            conn.prepare_translated_stmt(stmt, input)
+                .unwrap()
+                .run_ignore_rows()
+                .unwrap();
+
+            // The stored schema row carries the dialect marker and the
+            // original text.
+            let rows = conn
+                .prepare("SELECT sql FROM sqlite_schema WHERE name = 't'")
+                .unwrap()
+                .run_collect_rows()
+                .unwrap();
+            assert_eq!(rows.len(), 1);
+            let stored = rows[0][0].to_string();
+            assert_eq!(stored.trim_matches('\''), format!("/* test */ {input}"));
+            conn.close().unwrap();
+        }
+
+        // Round-trip: reopening parses the marked row back through the
+        // dialect and the table stays usable.
+        let dialect = Arc::new(TestSchemaDialect::default());
+        let db = open_db(&io, "dialect-store.db", Some(dialect.clone())).unwrap();
+        assert!(dialect.parse_calls.load(Ordering::SeqCst) >= 1);
+        let conn = db.connect().unwrap();
+        conn.execute("INSERT INTO t VALUES (1)").unwrap();
+        let rows = conn
+            .prepare("SELECT x FROM t")
+            .unwrap()
+            .run_collect_rows()
+            .unwrap();
+        assert_eq!(rows.len(), 1);
         conn.close().unwrap();
     }
 

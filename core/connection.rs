@@ -1016,10 +1016,36 @@ impl Connection {
         self.prepare_stmt_with_origin(stmt, StatementOrigin::Root)
     }
 
+    /// Prepare an already-translated statement while keeping the original
+    /// SQL text.
+    ///
+    /// A frontend that parses its own SQL dialect and translates it into
+    /// the engine AST calls this instead of [`Connection::prepare_stmt`],
+    /// so the original text reaches the schema dialect for storage in
+    /// `sqlite_schema` (and diagnostics) instead of the `<ast>`
+    /// placeholder.
+    pub fn prepare_translated_stmt(
+        self: &Arc<Connection>,
+        stmt: ast::Stmt,
+        input: &str,
+    ) -> Result<Statement> {
+        self.prepare_stmt_with_input_and_origin(stmt, input, StatementOrigin::Root)
+    }
+
     #[turso_macros::trace_stack]
     fn prepare_stmt_with_origin(
         self: &Arc<Connection>,
         stmt: ast::Stmt,
+        origin: StatementOrigin,
+    ) -> Result<Statement> {
+        self.prepare_stmt_with_input_and_origin(stmt, "<ast>", origin)
+    }
+
+    #[turso_macros::trace_stack]
+    fn prepare_stmt_with_input_and_origin(
+        self: &Arc<Connection>,
+        stmt: ast::Stmt,
+        input: &str,
         origin: StatementOrigin,
     ) -> Result<Statement> {
         if self.is_closed() {
@@ -1042,7 +1068,7 @@ impl Connection {
                 self.clone(),
                 &syms,
                 mode,
-                "<ast>", // No SQL input string available
+                input,
             )?;
             Ok(Statement::new_with_origin(
                 program,
